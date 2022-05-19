@@ -1,0 +1,5 @@
+STDOUT:
+plain cmd
+alternate cmd
+---
+STDERR:

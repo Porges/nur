@@ -1,0 +1,7 @@
+version: 1.0
+tasks:
+  default:
+    cmds:
+    - sh: exit 1
+      ignore_result: true
+    - echo 'ignored result!'

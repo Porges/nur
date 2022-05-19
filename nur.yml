@@ -1,0 +1,8 @@
+---
+version: "0.1"
+tasks:
+  hello:
+    description: says ‘hello, world!’
+    cmds:
+    - echo "hello, world!"
+    - echo "hello, world 2"

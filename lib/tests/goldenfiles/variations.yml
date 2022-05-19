@@ -1,0 +1,7 @@
+---
+version: "1.0"
+tasks:
+  default:
+    cmds:
+    - echo 'plain cmd'
+    - sh: echo 'alternate cmd'

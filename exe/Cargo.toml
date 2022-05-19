@@ -1,0 +1,23 @@
+[package]
+name = "nur"
+version = "0.1.0"
+edition = "2021"
+authors = [ "George Pollard <porges@porg.es>" ]
+
+[dependencies]
+clap = { version = "3.1.18", features = ["derive"] }
+itertools = "0.10.3"
+miette = { version = "4.7.1", features = ["fancy"] }
+nu-command = { version="0.62.0", optional=true }
+nu-engine = { version="0.62.0", optional=true }
+nu-parser = { version="0.62.0", optional=true }
+nu-protocol = { version="0.62.0" }
+nu-table = "0.62.0"
+nur-lib = { path="../lib" }
+question = "0.2.2"
+serde_yaml = "0.8.24"
+tokio = { version = "1.18.2", features = ["process", "rt", "macros", "io-util", "io-std"] }
+
+[features]
+default = []
+nu = ["dep:nu-command","dep:nu-engine","dep:nu-parser"]

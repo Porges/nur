@@ -1,0 +1,6 @@
+[workspace]
+members = ["exe", "lib"]
+
+[profile.release]
+strip = true
+lto = 'thin'
