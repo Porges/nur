@@ -1,0 +1,11 @@
+version: 1.0
+
+default:
+  deps: [a, b]
+
+a: { deps: [c] }
+b: { deps: [c] }
+
+c:
+  cmds:
+  - exit 100

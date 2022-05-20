@@ -1,5 +1,4 @@
-STDOUT:
+--- stdout ---
 plain cmd
 alternate cmd
----
-STDERR:
+--- stderr ---

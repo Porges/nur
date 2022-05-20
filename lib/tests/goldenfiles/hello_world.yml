@@ -1,6 +1,6 @@
 ---
 version: "1.0"
-tasks:
-  default:
-    cmds:
-    - echo 'Hello, world!'
+
+default:
+  cmds:
+  - echo 'Hello, world!'

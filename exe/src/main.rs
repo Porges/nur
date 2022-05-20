@@ -1,9 +1,7 @@
-use std::path::{Path, PathBuf};
-
-use tokio::io::AsyncWriteExt;
-
 use clap::Parser;
 use miette::IntoDiagnostic;
+use std::{collections::BTreeSet, path::PathBuf};
+use tokio::io::AsyncWriteExt;
 
 use nur_lib::commands;
 
@@ -11,55 +9,64 @@ use nur_lib::commands;
 #[derive(clap::Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    /// Names of the tasks in the Nurfile to run.
+    /// Names of the tasks to run.
     #[clap(exclusive = true)]
     task_names: Vec<String>,
 
-    /// Initialize a fresh Nurfile.
-    #[clap(exclusive = true, long)]
+    /// Create a fresh Nurfile.
+    #[clap(long, conflicts_with_all = &["list", "check", "task-names"])]
     init: bool,
 
     /// List all the tasks available in the Nurfile.
-    #[clap(exclusive = true, long, short)]
+    #[clap(long, short, conflicts_with_all = &["init", "task-names", "check", "dry-run"])]
     list: bool,
 
+    /// Syntax check the Nurfile and its shell commands.
+    #[clap(long, conflicts_with_all = &["init", "task-names", "list", "dry-run"])]
+    check: bool,
+
+    /// Should what would be executed but don’t actually run the commands.
+    #[clap(long, conflicts_with_all = &["list", "check"])]
+    dry_run: bool,
+
+    /// Specify which Nurfile to use.
     #[clap(long)]
-    nur_file: Option<PathBuf>,
+    file: Option<PathBuf>,
 }
 
-fn build_command(cli: Cli, cwd: &Path) -> Box<dyn commands::Command> {
+fn build_command(cli: Cli) -> Box<dyn commands::Command> {
     if cli.init {
-        if !matches!(
-            nur_lib::find_nurfile(cwd, false),
-            Err(nur_lib::Error::NurfileNotFound { .. })
-        ) {
-            panic!("nurfile already exists");
-        }
+        return Box::new(commands::Init {
+            nur_file: cli.file,
+            dry_run: cli.dry_run,
+        });
+    }
 
-        return Box::new(commands::Init {});
+    if cli.check {
+        return Box::new(commands::Check { nur_file: cli.file });
     }
 
     if cli.list {
-        return Box::new(commands::List {});
+        return Box::new(commands::List { nur_file: cli.file });
     }
 
     Box::new(commands::Task {
-        task_names: cli.task_names,
+        dry_run: cli.dry_run,
+        nur_file: cli.file,
+        task_names: BTreeSet::from_iter(cli.task_names),
     })
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> miette::Result<()> {
-    let cli = Cli::parse();
-
     let cwd = std::env::current_dir().into_diagnostic()?;
-    let config = nur_lib::load_config(&cwd, &cli.nur_file.as_deref())?;
-    let command = build_command(cli, &cwd);
+    let cli = Cli::parse();
+    let command = build_command(cli);
 
     let (tx_std, mut rx_std) = tokio::sync::mpsc::channel::<String>(1000);
     let (tx_err, mut rx_err) = tokio::sync::mpsc::channel::<String>(1000);
 
-    let stdout_writer = tokio::spawn(async move {
+    let stdout_writer = async move {
         let mut stdout = tokio::io::stdout();
         while let Some(line) = rx_std.recv().await {
             if stdout.write(line.as_bytes()).await.is_err() {
@@ -70,9 +77,9 @@ async fn main() -> miette::Result<()> {
                 break;
             }
         }
-    });
+    };
 
-    let stderr_writer = tokio::spawn(async move {
+    let stderr_writer = async move {
         let mut stderr = tokio::io::stderr();
         while let Some(line) = rx_err.recv().await {
             if stderr.write(line.as_bytes()).await.is_err() {
@@ -83,7 +90,7 @@ async fn main() -> miette::Result<()> {
                 break;
             }
         }
-    });
+    };
 
     let ctx = nur_lib::commands::Context {
         cwd,
@@ -91,11 +98,12 @@ async fn main() -> miette::Result<()> {
         stderr: tx_err,
     };
 
-    command.run(ctx, config).await?;
-    stdout_writer.await.into_diagnostic()?;
-    stderr_writer.await.into_diagnostic()?;
+    let (result, (), ()) = tokio::join!(command.run(ctx), stdout_writer, stderr_writer);
+    result
+}
 
-    #[cfg(feature = "nu")]
+#[cfg(feature = "nu")]
+fn nu() {
     {
         let engine_state = nu_command::create_default_context(&cwd);
         let stack = {
@@ -145,6 +153,4 @@ async fn main() -> miette::Result<()> {
             }
         }
     }
-
-    Ok(())
 }

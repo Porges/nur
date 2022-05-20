@@ -1,4 +1,3 @@
-STDOUT:
+--- stdout ---
 ignored result!
----
-STDERR:
+--- stderr ---

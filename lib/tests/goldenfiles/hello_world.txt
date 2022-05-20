@@ -1,4 +1,3 @@
-STDOUT:
+--- stdout ---
 Hello, world!
----
-STDERR:
+--- stderr ---

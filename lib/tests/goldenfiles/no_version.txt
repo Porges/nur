@@ -1,0 +1,13 @@
+--- stdout ---
+--- stderr ---
+--- error ---
+
+  × missing field `version` at line 2 column 6
+   ╭─[1:1]
+ 1 │ # shouldn't run due to no version
+ 2 │ tasks:
+   ·      ▲
+   ·      ╰── here
+ 3 │   default:
+   ╰────
+

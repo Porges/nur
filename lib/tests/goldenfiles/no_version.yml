@@ -1,0 +1,4 @@
+# shouldn't run due to no version
+tasks:
+  default:
+    cmds: []

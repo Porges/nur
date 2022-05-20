@@ -1,11 +1,11 @@
 version: "1.0"
-tasks:
-  hello:
-    cmds: ["echo hello!"]
 
-  world:
-    dependencies: [hello]
-    cmds: ["echo world"]
+default: 
+  dependencies: [world]
 
-  default: 
-    dependencies: [world]
+world:
+  dependencies: [hello]
+  cmds: ["echo world"]
+
+hello:
+  cmds: ["echo hello!"]

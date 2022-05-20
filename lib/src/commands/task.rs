@@ -1,117 +1,28 @@
-use std::{
-    collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque},
-    sync::RwLock,
-};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use futures::FutureExt;
+use futures::{future::Shared, FutureExt};
 use miette::IntoDiagnostic;
 use petgraph::algo;
 use petgraph::graphmap::DiGraphMap;
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    sync::oneshot,
-    task::JoinHandle,
+    io::{AsyncBufReadExt, AsyncRead, BufReader},
+    sync::{mpsc, oneshot},
 };
 
+use crate::nurfile::NurTask;
+
 pub struct Task {
-    pub task_names: Vec<String>,
-}
-
-async fn run_cmds(
-    ctx: crate::commands::Context,
-    task_name: String,
-    task: &crate::nurfile::Task,
-) -> miette::Result<()> {
-    for cmd in &task.commands {
-        let mut child = tokio::process::Command::new("/bin/sh")
-            .args(["-c", &cmd.sh])
-            .current_dir(&ctx.cwd)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .into_diagnostic()?;
-
-        let mut reader_out = BufReader::new(child.stdout.take().expect("no stdout handle")).lines();
-
-        let stdout = ctx.stdout.clone();
-        let out_task = tokio::spawn(async move {
-            while let Ok(Some(line)) = reader_out.next_line().await {
-                if (stdout.send(line).await).is_err() {
-                    break;
-                }
-            }
-        });
-
-        let mut reader_err = BufReader::new(child.stderr.take().expect("no stderr handle")).lines();
-
-        let stderr = ctx.stderr.clone();
-        let err_task = tokio::spawn(async move {
-            while let Ok(Some(line)) = reader_err.next_line().await {
-                if (stderr.send(line).await).is_err() {
-                    break;
-                }
-            }
-        });
-
-        let status = child.wait().await.into_diagnostic()?;
-        if !cmd.ignore_result && status.code() != Some(0) {
-            return Err(crate::Error::TaskFailed {
-                task_name,
-                command: cmd.sh.clone(),
-                exit_code: status.code(),
-            }
-            .into());
-        }
-
-        out_task.await.into_diagnostic()?;
-        err_task.await.into_diagnostic()?;
-    }
-
-    Ok(())
+    pub dry_run: bool,
+    pub nur_file: Option<std::path::PathBuf>,
+    pub task_names: BTreeSet<String>,
 }
 
 const DEFAULT_TASK_NAME: &str = "default";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TaskResult {
-    Success,
-    Failure,
-}
-
 #[async_trait::async_trait]
 impl crate::commands::Command for Task {
-    async fn run(
-        &self,
-        ctx: crate::commands::Context,
-        config: crate::nurfile::NurFile,
-    ) -> miette::Result<()> {
-        let mut to_run = {
-            let mut r = self.task_names.clone();
-            if r.is_empty() {
-                r.push(DEFAULT_TASK_NAME.to_string());
-            }
-            VecDeque::from(r)
-        };
-
-        // validate task names
-        for task_name in &to_run {
-            let task = config
-                .tasks
-                .get(task_name)
-                .ok_or_else(|| crate::Error::NoSuchTask {
-                    task_name: task_name.clone(),
-                })?;
-
-            for dep in &task.dependencies {
-                if !config.tasks.contains_key(dep) {
-                    return Err(crate::Error::NoSuchTask {
-                        task_name: dep.clone(),
-                    }
-                    .into());
-                }
-            }
-        }
+    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+        let (_, config) = crate::load_config(&ctx.cwd, &self.nur_file)?;
 
         // validate no cycles
         {
@@ -128,56 +39,164 @@ impl crate::commands::Command for Task {
             })?;
         }
 
-        let mut shots = BTreeMap::new();
-        for name in config.tasks.keys() {
-            let (tx, rx) = oneshot::channel::<TaskResult>();
-            shots.insert(name, (Some(tx), rx.shared()));
-        }
-
-        let mut seen = BTreeSet::new();
-        let mut spawned: BTreeMap<String, JoinHandle<miette::Result<()>>> = BTreeMap::new();
-        for task_name in &to_run {
-            seen.insert(task_name.clone());
-        }
-
-        while let Some(task_name) = to_run.pop_front() {
-            let task = config.tasks[&task_name].clone();
-
-            let mut dep_shots = Vec::new();
-            dep_shots.reserve(task.dependencies.len());
-            for dep in &task.dependencies {
-                if seen.insert(dep.clone()) {
-                    to_run.push_back(dep.clone());
-                }
-
-                dep_shots.push(shots[&dep].1.clone());
+        // TODO: report all errors?
+        for result in run_tasks(&ctx, &self.task_names, config.tasks).await? {
+            match result {
+                Ok(_) => {}
+                Err(e) => return Err(e),
             }
-            let my_shot = shots.get_mut(&task_name).unwrap().0.take().unwrap();
-
-            let ctx = ctx.clone();
-            spawned.insert(
-                task_name.clone(),
-                tokio::spawn(async move {
-                    for dep in dep_shots {
-                        let tr = dep.await.into_diagnostic()?;
-                        if tr == TaskResult::Failure {
-                            // we don’t fail because upstream failed;
-                            // produces better diagnostics.
-                            return Ok(());
-                        }
-                    }
-
-                    run_cmds(ctx, task_name, &task).await?;
-                    let _ = my_shot.send(TaskResult::Success);
-                    Ok(())
-                }),
-            );
-        }
-
-        for spawn in spawned.into_values() {
-            spawn.await.into_diagnostic()??;
         }
 
         Ok(())
+    }
+}
+
+struct TaskToRun {
+    task_name: String,
+    task: crate::nurfile::NurTask,
+    sender: oneshot::Sender<()>,
+}
+
+struct Runner {
+    receivers: BTreeMap<String, Shared<oneshot::Receiver<()>>>,
+    to_run: VecDeque<TaskToRun>,
+    tasks: BTreeMap<String, NurTask>,
+}
+
+impl Runner {
+    fn new(tasks: BTreeMap<String, NurTask>) -> Self {
+        Runner {
+            receivers: Default::default(),
+            to_run: Default::default(),
+            tasks,
+        }
+    }
+
+    pub fn enqueue_task(
+        &mut self,
+        task_name: &str,
+    ) -> miette::Result<&Shared<oneshot::Receiver<()>>> {
+        if self.receivers.contains_key(task_name) {
+            Ok(&self.receivers[task_name])
+        } else {
+            let (task_name, task) =
+                self.tasks
+                    .remove_entry(task_name)
+                    .ok_or_else(|| crate::Error::NoSuchTask {
+                        task_name: task_name.to_string(),
+                    })?;
+
+            let (sender, receiver) = oneshot::channel();
+            self.receivers.insert(task_name.clone(), receiver.shared());
+            let result = &self.receivers[&task_name];
+            self.to_run.push_back(TaskToRun {
+                task_name,
+                task,
+                sender,
+            });
+            Ok(result)
+        }
+    }
+}
+
+enum TaskResult {
+    Skipped,
+    RanToCompletion,
+}
+
+async fn run_tasks(
+    ctx: &crate::commands::Context,
+    task_names: &BTreeSet<String>,
+    tasks: BTreeMap<String, NurTask>,
+) -> miette::Result<Vec<miette::Result<TaskResult>>> {
+    let mut r = Runner::new(tasks);
+    if task_names.is_empty() {
+        r.enqueue_task(DEFAULT_TASK_NAME)?;
+    } else {
+        for task_name in task_names {
+            r.enqueue_task(task_name)?;
+        }
+    }
+
+    let mut spawned: Vec<_> = Vec::new();
+
+    while let Some(run) = r.to_run.pop_front() {
+        let ctx = ctx.clone();
+        let mut await_upon = Vec::new();
+        for dep in &run.task.dependencies {
+            await_upon.push(r.enqueue_task(dep)?.clone());
+        }
+
+        spawned.push(async move {
+            // if upstream task failed it will not send a result,
+            // and we will bail out, and thus will also not send a result
+            if futures::future::try_join_all(await_upon).await.is_err() {
+                // don’t report this as an error; task cancelled
+                return Ok(TaskResult::Skipped);
+            }
+
+            run_cmds(ctx, run.task_name, &run.task).await?;
+
+            // ignore failures from downstream tasks not existing
+            let _ = run.sender.send(());
+            Ok(TaskResult::RanToCompletion)
+        });
+    }
+
+    Ok(futures::future::join_all(spawned).await)
+}
+
+async fn run_cmds(
+    ctx: crate::commands::Context,
+    task_name: String,
+    task: &NurTask,
+) -> miette::Result<()> {
+    for cmd in &task.commands {
+        let mut child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", &cmd.sh])
+            .current_dir(&ctx.cwd)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .envs(&cmd.env)
+            .spawn()
+            .into_diagnostic()?;
+
+        let ((), (), status) = tokio::join!(
+            spawn_reader(
+                child.stdout.take().expect("no stdout handle"),
+                ctx.stdout.clone()
+            ),
+            spawn_reader(
+                child.stderr.take().expect("no stderr handle"),
+                ctx.stderr.clone()
+            ),
+            child.wait(),
+        );
+
+        let status = status.into_diagnostic()?;
+        if !cmd.ignore_result && status.code() != Some(0) {
+            return Err(crate::Error::TaskFailed {
+                task_name,
+                command: cmd.sh.clone(),
+                exit_status: status,
+            }
+            .into());
+        }
+    }
+
+    Ok(())
+}
+
+async fn spawn_reader<R>(from: R, into: mpsc::Sender<String>)
+where
+    R: AsyncRead + Send + 'static,
+    BufReader<R>: Unpin,
+{
+    let mut reader = BufReader::new(from).lines();
+    while let Ok(Some(line)) = reader.next_line().await {
+        if (into.send(line).await).is_err() {
+            break;
+        }
     }
 }

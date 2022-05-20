@@ -1,15 +1,15 @@
 use miette::IntoDiagnostic;
 use nu_table::StyledString;
 
-pub struct List {}
+pub struct List {
+    pub nur_file: Option<std::path::PathBuf>,
+}
 
 #[async_trait::async_trait]
 impl crate::commands::Command for List {
-    async fn run(
-        &self,
-        ctx: crate::commands::Context,
-        config: crate::nurfile::NurFile,
-    ) -> miette::Result<()> {
+    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+        let (_, config) = crate::load_config(&ctx.cwd, &self.nur_file)?;
+
         let taskdata: Vec<Vec<StyledString>> = config
             .tasks // already sorted by virtue of being in a BTreeMap
             .into_iter()

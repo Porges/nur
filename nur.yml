@@ -1,8 +1,23 @@
----
-version: "0.1"
-tasks:
-  hello:
-    description: says ‘hello, world!’
+version: 1.0
+
+default:
+    description: A welcoming message.
     cmds:
-    - echo "hello, world!"
-    - echo "hello, world 2"
+    - echo '👋 Hello from your nur file!'
+    - echo '💡 Now try `nur --list` to list other tasks you can run.'
+
+more:
+    description: 💡 Now run this task with `nur more`…
+    cmds:
+    - echo '🤖 Running another task… beep boop…'
+    - sleep 2
+    - echo '💡 You can run `nur --help` to see other available commands,\n   such as --check or --dry-run.'
+    - echo
+    - sleep 2
+    - echo 'This concludes the “tutorial”. Enjoy!'
+
+build-binary:
+    description: Build the release binary.
+    cmds:
+    - sh: cargo build --release --target $TARGET --locked
+      env: { TARGET: x86_64-unknown-linux-musl }

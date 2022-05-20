@@ -2157,15 +2157,11 @@ name = "nur"
 version = "0.1.0"
 dependencies = [
  "clap",
- "itertools",
  "miette 4.7.1",
  "nu-command",
  "nu-engine",
  "nu-parser",
- "nu-protocol",
- "nu-table",
  "nur-lib",
- "question",
  "serde_yaml",
  "tokio",
 ]
@@ -2184,6 +2180,7 @@ dependencies = [
  "nu-protocol",
  "nu-table",
  "petgraph",
+ "question",
  "serde",
  "serde_with",
  "serde_yaml",

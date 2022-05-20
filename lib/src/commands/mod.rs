@@ -1,7 +1,9 @@
+mod check;
 mod init;
 mod list;
 mod task;
 
+pub use check::Check;
 pub use init::Init;
 pub use list::List;
 pub use task::Task;
@@ -17,9 +19,5 @@ pub struct Context {
 
 #[async_trait::async_trait]
 pub trait Command {
-    async fn run(
-        &self,
-        ctx: crate::commands::Context,
-        config: crate::nurfile::NurFile,
-    ) -> miette::Result<()>;
+    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()>;
 }

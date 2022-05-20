@@ -10,7 +10,7 @@ pub mod nurfile_yaml;
 
 use std::path::{Path, PathBuf};
 
-use miette::Diagnostic;
+use miette::{Diagnostic, IntoDiagnostic};
 use thiserror::Error;
 use version::Version;
 
@@ -58,20 +58,23 @@ pub enum Error {
     )]
     NoSuchTask { task_name: String },
 
-    #[error("Task ‘{task_name}’ failed when executing command: `{command}`")]
+    #[error("Task ‘{task_name}’ failed ({exit_status}) when executing command: `{command}`")]
     #[diagnostic(code(nur::task_failed))]
     TaskFailed {
         task_name: String,
         command: String,
-        exit_code: Option<i32>,
+        exit_status: std::process::ExitStatus,
     },
 }
 
-type Result<T> = miette::Result<T, Error>;
+type Result<T> = miette::Result<T>;
 
-pub fn load_config(initial_dir: &Path, file: &Option<&Path>) -> Result<nurfile::NurFile> {
-    let (_, nurconfig) = read_nurfile(initial_dir, file)?;
-    Ok(nurconfig)
+pub fn load_config(
+    initial_dir: &Path,
+    file: &Option<impl AsRef<Path>>,
+) -> Result<(PathBuf, nurfile::NurFile)> {
+    let (path, nurconfig) = read_nurfile(initial_dir, file)?;
+    Ok((path, nurconfig))
 }
 
 type NurfileParser = dyn Fn(&std::path::Path, &str) -> miette::Result<nurfile::NurFile>;
@@ -102,7 +105,8 @@ pub fn find_nurfile(
             return Err(Error::MultipleNurFilesFound {
                 directory: root.to_owned(),
                 files: files_to_check.into_iter().map(|(path, _)| path).collect(),
-            });
+            }
+            .into());
         }
 
         if let Some(file) = files_to_check.pop() {
@@ -117,23 +121,30 @@ pub fn find_nurfile(
     // hit top level without finding file:
     Err(Error::NurfileNotFound {
         directory: initial_dir.to_owned(),
-    })
+    }
+    .into())
 }
 
 pub fn read_nurfile(
     initial_dir: &Path,
-    file: &Option<&Path>,
+    file: &Option<impl AsRef<Path>>,
 ) -> Result<(PathBuf, nurfile::NurFile)> {
     let file = match file {
-        Some(x) => ((*x).to_owned(), &nurfile_yaml::parse as &NurfileParser),
+        Some(x) => (
+            x.as_ref().to_owned(),
+            &nurfile_yaml::parse as &NurfileParser,
+        ),
         None => find_nurfile(initial_dir, true)?,
     };
 
-    let contents = std::fs::read_to_string(&file.0)?;
-    let parsed = (file.1)(&file.0, &contents).map_err(|inner| Error::NurfileSyntaxError {
-        path: file.0.clone(),
-        inner,
-    })?;
+    let contents = std::fs::read_to_string(&file.0).into_diagnostic()?;
+    let parsed = (file.1)(&file.0, &contents)?;
+    /* TODO: this hides the inner diagnostics
+        .map_err(|inner| Error::NurfileSyntaxError {
+            path: file.0.clone(),
+            inner,
+        })?;
+    */
 
     Ok((file.0, parsed))
 }
