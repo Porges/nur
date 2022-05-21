@@ -30,9 +30,9 @@ jobs:
           target: x86_64-unknown-linux-musl
           # components: rustfmt, clippy
 
-      - name: Test with cargo-tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
+      - uses: actions-rs/cargo@v1
         with:
+          command: test
           args: --release --locked --target x86_64-unknown-linux-musl
 
       - uses: actions-rs/cargo@v1
