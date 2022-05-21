@@ -23,8 +23,22 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - run: cargo test --release --target x86_64-unknown-linux-musl --locked --verbose
-      - run: cargo build --release --target x86_64-unknown-linux-musl --locked --verbose
+      - uses: actions-rs/toolchain@v1
+        with:
+          default: true
+          toolchain: stable
+          target: x86_64-unknown-linux-musl
+          # components: rustfmt, clippy
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release --locked
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --locked
 
       - uses: actions/upload-artifact@v3
         with:
