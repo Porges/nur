@@ -21,3 +21,29 @@ build-binary:
     run:
     - sh: cargo build --release --target $TARGET --locked
       env: { TARGET: x86_64-unknown-linux-musl }
+
+test-failure:
+    deps: [slow, fail]
+
+slow:
+    run: sleep 20
+
+fail:
+    run:
+    - sleep 2
+    - exit 123
+
+test-parallel:
+    deps: [sleep1, sleep2]
+
+sleep1:
+    run:
+    - sleep 5
+    - echo 'hello from 1'
+    - sleep 5
+
+sleep2:
+    run:
+    - sleep 5
+    - echo 'hello from 2'
+    - sleep 5

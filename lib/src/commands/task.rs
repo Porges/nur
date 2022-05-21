@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use command_group::{tokio::AsyncCommandGroup, UnixChildExt};
 use futures::{future::Shared, FutureExt};
 use miette::IntoDiagnostic;
 use petgraph::algo;
@@ -99,8 +100,10 @@ impl Runner {
     }
 }
 
+#[derive(PartialEq)]
 enum TaskResult {
     Skipped,
+    Cancelled,
     RanToCompletion,
 }
 
@@ -120,6 +123,8 @@ async fn run_tasks(
 
     let mut spawned: Vec<_> = Vec::new();
 
+    let cancellation = tokio_util::sync::CancellationToken::new();
+
     while let Some(run) = r.to_run.pop_front() {
         let ctx = ctx.clone();
         let mut await_upon = Vec::new();
@@ -127,6 +132,7 @@ async fn run_tasks(
             await_upon.push(r.enqueue_task(dep)?.clone());
         }
 
+        let cancellation = cancellation.clone();
         spawned.push(async move {
             // if upstream task failed it will not send a result,
             // and we will bail out, and thus will also not send a result
@@ -135,11 +141,13 @@ async fn run_tasks(
                 return Ok(TaskResult::Skipped);
             }
 
-            run_cmds(ctx, run.task_name, &run.task).await?;
+            let result = run_cmds(ctx, run.task_name, &run.task, &cancellation).await?;
+            if result == TaskResult::RanToCompletion {
+                // ignore failures from downstream tasks not existing
+                let _ = run.sender.send(());
+            }
 
-            // ignore failures from downstream tasks not existing
-            let _ = run.sender.send(());
-            Ok(TaskResult::RanToCompletion)
+            Ok(result)
         });
     }
 
@@ -150,7 +158,8 @@ async fn run_cmds(
     ctx: crate::commands::Context,
     task_name: String,
     task: &NurTask,
-) -> miette::Result<()> {
+    cancellation: &tokio_util::sync::CancellationToken,
+) -> miette::Result<TaskResult> {
     for cmd in &task.commands {
         let mut child = tokio::process::Command::new("/bin/sh")
             .args(["-c", &cmd.sh])
@@ -159,33 +168,50 @@ async fn run_cmds(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .envs(&cmd.env)
-            .spawn()
+            .group_spawn()
             .into_diagnostic()?;
 
         let ((), (), status) = tokio::join!(
             spawn_reader(
-                child.stdout.take().expect("no stdout handle"),
+                child.inner().stdout.take().expect("no stdout handle"),
                 ctx.stdout.clone()
             ),
             spawn_reader(
-                child.stderr.take().expect("no stderr handle"),
+                child.inner().stderr.take().expect("no stderr handle"),
                 ctx.stderr.clone()
             ),
-            child.wait(),
+            async move {
+                tokio::select! {
+                    () = cancellation.cancelled() => {
+                        let _ = child.signal(command_group::Signal::SIGINT);
+                        _ = child.wait().await;
+                        None
+                    }
+                    result = child.wait() => {
+                        Some(result)
+                    }
+                }
+            },
         );
 
-        let status = status.into_diagnostic()?;
-        if !cmd.ignore_result && status.code() != Some(0) {
-            return Err(crate::Error::TaskFailed {
-                task_name,
-                command: cmd.sh.clone(),
-                exit_status: status,
+        if let Some(status) = status {
+            let status = status.into_diagnostic()?;
+            if !cmd.ignore_result && status.code() != Some(0) {
+                cancellation.cancel();
+                return Err(crate::Error::TaskFailed {
+                    task_name,
+                    command: cmd.sh.clone(),
+                    exit_status: status,
+                }
+                .into());
             }
-            .into());
+        } else {
+            // we were cancelled
+            return Ok(TaskResult::Cancelled);
         }
     }
 
-    Ok(())
+    Ok(TaskResult::RanToCompletion)
 }
 
 async fn spawn_reader<R>(from: R, into: mpsc::Sender<String>)
