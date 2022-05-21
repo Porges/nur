@@ -9,4 +9,4 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     jq
 
 USER vscode
-RUN cargo install cargo-edit cargo-audit cargo-release git-cliff
+RUN cargo install cargo-edit cargo-audit cargo-workspaces git-cliff
