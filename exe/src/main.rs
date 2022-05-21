@@ -50,6 +50,10 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
         return Box::new(commands::List { nur_file: cli.file });
     }
 
+    if cli.dry_run {
+        panic!("dry-run not yet supported");
+    }
+
     Box::new(commands::Task {
         dry_run: cli.dry_run,
         nur_file: cli.file,
