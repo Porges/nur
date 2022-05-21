@@ -20,7 +20,7 @@ nu-protocol = "0.62.0"
 nu-table = "0.62.0"
 serde = { version = "1.0.137", optional = true }
 serde_yaml = { version = "0.8.24", optional = true }
-tokio = { version = "1.18.2", features = ["process", "io-util", "io-std", "sync"] }
+tokio = { version = "1.18.2", features = ["process", "io-util", "io-std", "sync", "fs", "macros"] }
 async-trait = "0.1.53"
 void = "1.0.2"
 serde_with = "1.13.0"
