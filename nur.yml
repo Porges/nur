@@ -2,13 +2,13 @@ version: 1.0
 
 default:
     description: A welcoming message.
-    cmds:
+    run:
     - echo '👋 Hello from your nur file!'
     - echo '💡 Now try `nur --list` to list other tasks you can run.'
 
 more:
     description: 💡 Now run this task with `nur more`…
-    cmds:
+    run:
     - echo '🤖 Running another task… beep boop…'
     - sleep 2
     - echo '💡 You can run `nur --help` to see other available commands,\n   such as --check or --dry-run.'
@@ -18,6 +18,6 @@ more:
 
 build-binary:
     description: Build the release binary.
-    cmds:
+    run:
     - sh: cargo build --release --target $TARGET --locked
       env: { TARGET: x86_64-unknown-linux-musl }

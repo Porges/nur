@@ -1,4 +1,6 @@
 --- stdout ---
+simple run
+run sh
 plain cmd
 alternate cmd
 --- stderr ---

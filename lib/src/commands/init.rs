@@ -14,13 +14,13 @@ const DEFAULT_NAME: &str = "nur.yml";
 const DEFAULT_CONTENT: &str = r#"version: 1.0
 default:
     description: A welcoming message.
-    cmds:
+    run:
     - echo '👋 Hello from your nur file!'
     - echo '💡 Now try `nur --list` to list other tasks you can run.'
 
 more:
     description: 💡 Now run this task with `nur more`…
-    cmds:
+    run:
     - echo '🤖 Running another task… beep boop…'
     - sleep 2
     - echo '💡 You can run `nur --help` to see other available commands,\n   such as --check or --dry-run.'

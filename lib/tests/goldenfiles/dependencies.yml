@@ -5,7 +5,7 @@ default:
 
 world:
   dependencies: [hello]
-  cmds: ["echo world"]
+  run: ["echo world"]
 
 hello:
-  cmds: ["echo hello!"]
+  run: ["echo hello!"]

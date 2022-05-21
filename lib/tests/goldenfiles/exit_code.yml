@@ -1,7 +1,7 @@
 version: 1.0
 
 default:
-  cmds:
+  run:
   - sh: exit 1
     ignore_result: true
   - echo 'ignored result!'

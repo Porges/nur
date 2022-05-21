@@ -26,9 +26,9 @@ pub struct Shared {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Task {
-    #[serde(alias = "cmds", default)]
-    #[serde_as(deserialize_as = "Vec<serde_with::PickFirst<(_, serde_with::DisplayFromStr)>>")]
-    commands: Vec<Command>,
+    #[serde(default)]
+    #[serde_as(deserialize_as = "serde_with::OneOrMany<serde_with::PickFirst<(_, serde_with::DisplayFromStr)>>")]
+    run: Vec<Command>,
 
     #[serde(alias = "deps", default)]
     dependencies: Vec<String>,
@@ -75,7 +75,7 @@ impl From<NurYaml> for crate::nurfile::NurFile {
                     crate::nurfile::NurTask {
                         env: t.environment,
                         description: t.description,
-                        commands: t.commands.into_iter().map(|x| x.into()).collect(),
+                        commands: t.run.into_iter().map(|x| x.into()).collect(),
                         dependencies: t.dependencies,
                     },
                 )

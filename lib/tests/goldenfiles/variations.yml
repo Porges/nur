@@ -2,6 +2,14 @@
 version: "1.0"
 
 default:
-  cmds:
+  deps: [runString, runSh]
+  run:
   - echo 'plain cmd'
   - sh: echo 'alternate cmd'
+
+runString:
+  run: echo 'simple run'
+
+runSh:
+  run:
+    sh: echo 'run sh'

@@ -7,5 +7,5 @@ a: { deps: [c] }
 b: { deps: [c] }
 
 c:
-  cmds:
+  run:
   - exit 100
