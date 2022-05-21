@@ -68,12 +68,9 @@ async fn main() -> miette::Result<()> {
 
     let stdout_writer = async move {
         let mut stdout = tokio::io::stdout();
-        while let Some(line) = rx_std.recv().await {
-            if stdout.write(line.as_bytes()).await.is_err() {
-                break;
-            }
-
-            if stdout.write(b"\n").await.is_err() {
+        while let Some(mut line) = rx_std.recv().await {
+            line.push('\n');
+            if stdout.write_all(line.as_bytes()).await.is_err() {
                 break;
             }
         }
@@ -81,12 +78,9 @@ async fn main() -> miette::Result<()> {
 
     let stderr_writer = async move {
         let mut stderr = tokio::io::stderr();
-        while let Some(line) = rx_err.recv().await {
-            if stderr.write(line.as_bytes()).await.is_err() {
-                break;
-            }
-
-            if stderr.write(b"\n").await.is_err() {
+        while let Some(mut line) = rx_err.recv().await {
+            line.push('\n');
+            if stderr.write_all(line.as_bytes()).await.is_err() {
                 break;
             }
         }

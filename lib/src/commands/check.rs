@@ -51,6 +51,7 @@ async fn validate_cmd(cwd: &std::path::Path, cmd: &str) -> miette::Result<Vec<St
     {
         let mut stdin = proc.stdin.expect("stdin handle");
         stdin.write_all(cmd.as_bytes()).await.into_diagnostic()?;
+        stdin.flush().await.into_diagnostic()?;
     }
 
     let mut output = Vec::new();

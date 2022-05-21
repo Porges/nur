@@ -16,7 +16,7 @@ thiserror = "1.0.31"
 knuffel = { version = "2.0.0", optional = true }
 nu-engine = { version = "0.62.0", optional = true }
 nu-parser = { version = "0.62.0", optional = true }
-nu-protocol = { version = "0.62.0"}
+nu-protocol = "0.62.0"
 nu-table = "0.62.0"
 serde = { version = "1.0.137", optional = true }
 serde_yaml = { version = "0.8.24", optional = true }
