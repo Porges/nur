@@ -3,6 +3,10 @@ name = "nur"
 version = "0.0.1"
 edition = "2021"
 authors = [ "George Pollard <porges@porg.es>" ]
+license = "GPL-3.0"
+readme = "../README.md"
+repository = "https://github.com/Porges/nur"
+categories = ["development-tools::build-utils"]
 
 [dependencies]
 clap = { version = "3.1.18", features = ["derive"] }
