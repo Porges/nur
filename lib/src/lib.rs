@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod nurfile;
+pub mod output;
 pub mod version;
 
 use std::path::PathBuf;

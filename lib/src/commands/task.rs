@@ -40,8 +40,21 @@ impl crate::commands::Command for Task {
             })?;
         }
 
+        let output = crate::output::from_config(&config);
+
+        let (tx, rx) = mpsc::channel::<crate::StatusMessage>(100);
+        let local_ctx = LocalContext {
+            cwd: ctx.cwd.clone(),
+            tx,
+        };
+
+        let (task_results, ()) = tokio::join!(
+            run_tasks(local_ctx, &self.task_names, config.tasks),
+            output.handle(&ctx, rx),
+        );
+
         // TODO: report all errors?
-        for result in run_tasks(&ctx, &self.task_names, config.tasks).await? {
+        for result in task_results? {
             match result {
                 Ok(_) => {}
                 Err(e) => return Err(e),
@@ -50,6 +63,12 @@ impl crate::commands::Command for Task {
 
         Ok(())
     }
+}
+
+#[derive(Clone)]
+struct LocalContext {
+    cwd: std::path::PathBuf,
+    tx: mpsc::Sender<crate::StatusMessage>,
 }
 
 struct TaskToRun {
@@ -101,7 +120,7 @@ impl Runner {
 }
 
 async fn run_tasks(
-    ctx: &crate::commands::Context,
+    ctx: LocalContext,
     task_names: &BTreeSet<String>,
     tasks: BTreeMap<String, NurTask>,
 ) -> miette::Result<Vec<miette::Result<TaskResult>>> {
@@ -175,7 +194,7 @@ async fn run_tasks(
 }
 
 async fn run_cmds(
-    ctx: &crate::commands::Context,
+    ctx: &LocalContext,
     task: &NurTask,
     cancellation: &tokio_util::sync::CancellationToken,
 ) -> Result<TaskResult, TaskError> {

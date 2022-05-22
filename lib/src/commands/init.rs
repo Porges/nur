@@ -4,7 +4,7 @@ use miette::{Context, IntoDiagnostic};
 use question::{Answer, Question};
 use tokio::io::AsyncWriteExt;
 
-use crate::StatusMessage;
+use crate::commands::Message;
 
 pub struct Init {
     pub nur_file: Option<std::path::PathBuf>,
@@ -58,8 +58,8 @@ impl crate::commands::Command for Init {
             if path.exists() {
                 panic!("File already exists")
             } else {
-                ctx.tx
-                    .send(StatusMessage::StdOut(format!(
+                ctx.output
+                    .send(Message::Out(format!(
                         "[dryrun] Would create file {path:#?} with sample content."
                     )))
                     .await
@@ -76,13 +76,14 @@ impl crate::commands::Command for Init {
                     .wrap_err_with(|| {
                         format!("File already exists at destination ‘{}’", path.display())
                     })?;
+
                 file.write_all(DEFAULT_CONTENT.as_bytes())
                     .await
                     .into_diagnostic()?;
             }
 
-            ctx.tx
-                .send(StatusMessage::StdOut(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.")))
+            ctx.output
+                .send(Message::Out(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.")))
                 .await
                 .into_diagnostic()?;
         }

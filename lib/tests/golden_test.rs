@@ -7,7 +7,7 @@ use std::{
 use goldenfile::Mint;
 use tokio::sync::mpsc::{self, Sender};
 
-use nur_lib::{commands::Command, StatusMessage};
+use nur_lib::{commands::Command, commands::Message};
 
 #[tokio::test]
 async fn run_golden_tests() -> std::io::Result<()> {
@@ -32,10 +32,8 @@ async fn run_golden_tests() -> std::io::Result<()> {
                 let mut stderr = Vec::new();
                 while let Some(line) = rx.recv().await {
                     match line {
-                        StatusMessage::StdOut(line) => stdout.push(line),
-                        StatusMessage::StdErr(line) => stderr.push(line),
-                        StatusMessage::TaskStarted { name } => {}
-                        StatusMessage::TaskFinished { name, result } => {}
+                        Message::Out(line) => stdout.push(line),
+                        Message::Err(line) => stderr.push(line),
                     }
                 }
 
@@ -80,11 +78,11 @@ async fn run_golden_tests() -> std::io::Result<()> {
 async fn run_config(
     parent_dir: &Path,
     nurfile_path: &Path,
-    tx: Sender<StatusMessage>,
+    output: Sender<nur_lib::commands::Message>,
 ) -> miette::Result<()> {
     let ctx = nur_lib::commands::Context {
         cwd: parent_dir.to_owned(),
-        tx,
+        output,
     };
 
     let task_command = nur_lib::commands::Task {

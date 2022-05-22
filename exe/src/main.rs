@@ -1,7 +1,7 @@
 use clap::Parser;
 use miette::IntoDiagnostic;
 use std::{collections::BTreeSet, path::PathBuf};
-use tokio::io::AsyncWriteExt;
+use tokio::{io::AsyncWriteExt, sync::mpsc};
 
 use nur_lib::commands;
 
@@ -67,49 +67,32 @@ async fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let command = build_command(cli);
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<nur_lib::StatusMessage>(1000);
+    let (tx, rx) = tokio::sync::mpsc::channel::<nur_lib::commands::Message>(1000);
+    let ctx = nur_lib::commands::Context { cwd, output: tx };
 
-    let handler = async move {
-        let mut stdout = tokio::io::stdout();
-        let mut stderr = tokio::io::stderr();
+    let (result, ()) = tokio::join!(command.run(ctx), handle_output(rx));
+    result
+}
 
-        while let Some(msg) = rx.recv().await {
-            match msg {
-                nur_lib::StatusMessage::StdOut(mut line) => {
-                    line.push('\n');
-                    if stdout.write_all(line.as_bytes()).await.is_err() {
-                        break;
-                    }
+async fn handle_output(mut rx: mpsc::Receiver<nur_lib::commands::Message>) {
+    let mut stdout = tokio::io::stdout();
+    let mut stderr = tokio::io::stderr();
+    while let Some(message) = rx.recv().await {
+        match message {
+            nur_lib::commands::Message::Out(mut s) => {
+                s.push('\n');
+                if stdout.write_all(s.as_bytes()).await.is_err() {
+                    break;
                 }
-                nur_lib::StatusMessage::StdErr(mut line) => {
-                    line.push('\n');
-                    if stderr.write_all(line.as_bytes()).await.is_err() {
-                        break;
-                    }
-                }
-                nur_lib::StatusMessage::TaskStarted { name } => {
-                    let msg = format!("--- Started task ‘{name}’\n");
-                    if stdout.write_all(msg.as_bytes()).await.is_err() {
-                        break;
-                    }
-                }
-                nur_lib::StatusMessage::TaskFinished { name, result } => {
-                    let msg = match result {
-                        Ok(r) => format!("--- Task ‘{name}’ completed: {r:?}\n"),
-                        Err(r) => format!("--- Task ‘{name}’ failed: {r}\n"),
-                    };
-
-                    if stdout.write_all(msg.as_bytes()).await.is_err() {
-                        break;
-                    }
+            }
+            nur_lib::commands::Message::Err(mut s) => {
+                s.push('\n');
+                if stderr.write_all(s.as_bytes()).await.is_err() {
+                    break;
                 }
             }
         }
-    };
-
-    let ctx = nur_lib::commands::Context { cwd, tx };
-    let (result, ()) = tokio::join!(command.run(ctx), handler);
-    result
+    }
 }
 
 #[cfg(feature = "nu")]

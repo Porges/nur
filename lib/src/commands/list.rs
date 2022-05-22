@@ -1,7 +1,7 @@
 use miette::IntoDiagnostic;
 use nu_table::StyledString;
 
-use crate::StatusMessage;
+use super::Message;
 
 pub struct List {
     pub nur_file: Option<std::path::PathBuf>,
@@ -36,9 +36,11 @@ impl crate::commands::Command for List {
         let color_hm = Default::default();
         let table = nu_table::draw_table(&table, 80, &color_hm, &config);
 
-        ctx.tx
-            .send(StatusMessage::StdOut(table))
+        ctx.output
+            .send(Message::Out(table))
             .await
-            .into_diagnostic()
+            .into_diagnostic()?;
+
+        Ok(())
     }
 }

@@ -1,7 +1,7 @@
 use miette::IntoDiagnostic;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::StatusMessage;
+use crate::commands::Message;
 
 pub struct Check {
     pub nur_file: Option<std::path::PathBuf>,
@@ -12,35 +12,44 @@ impl crate::commands::Command for Check {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
-        let mut has_error = false;
+        let mut err_count = 0;
         for (task_name, task) in config.tasks {
             for (ix, cmd) in task.commands.iter().enumerate() {
                 let errors = validate_cmd(&ctx.cwd, &cmd.sh).await?;
                 if !errors.is_empty() {
-                    has_error = true;
-                    let message =
-                        format!("Error(s) in task ‘{task_name}’ command {ix}: `{}`", cmd.sh);
-                    ctx.tx
-                        .send(StatusMessage::StdErr(message))
+                    err_count += 1;
+                    let message = format!(
+                        "Error(s) in task ‘{task_name}’ command {ix}: `{}`\n",
+                        cmd.sh
+                    );
+
+                    ctx.output
+                        .send(Message::Out(message))
                         .await
                         .into_diagnostic()?;
 
                     for line in errors {
                         let line = "\t".to_owned() + &line;
-                        ctx.tx
-                            .send(StatusMessage::StdErr(line))
+                        ctx.output
+                            .send(Message::Out(line))
                             .await
-                            .into_diagnostic()?;
+                            .into_diagnostic()?
                     }
                 }
             }
         }
 
-        if !has_error {
-            ctx.tx
-                .send(StatusMessage::StdOut(format!(
-                    "No syntax errors found in {}",
-                    path.display()
+        if err_count == 0 {
+            ctx.output
+                .send(Message::Out(format!(
+                    "No syntax errors found in: {path:#?}"
+                )))
+                .await
+                .into_diagnostic()?;
+        } else {
+            ctx.output
+                .send(Message::Out(format!(
+                    "{err_count} syntax errors found in: {path:#?}"
                 )))
                 .await
                 .into_diagnostic()?;

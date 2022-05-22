@@ -7,13 +7,18 @@ pub use check::Check;
 pub use init::Init;
 pub use list::List;
 pub use task::Task;
-
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub struct Context {
     pub cwd: std::path::PathBuf,
-    pub tx: Sender<crate::StatusMessage>,
+    pub output: mpsc::Sender<Message>,
+}
+
+#[derive(Debug)]
+pub enum Message {
+    Out(String),
+    Err(String),
 }
 
 #[async_trait::async_trait]
