@@ -1,11 +1,13 @@
-use goldenfile::Mint;
-use nur_lib::commands::Command;
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
 };
+
+use goldenfile::Mint;
 use tokio::sync::mpsc::{self, Sender};
+
+use nur_lib::{commands::Command, StatusMessage};
 
 #[tokio::test]
 async fn run_golden_tests() -> std::io::Result<()> {
@@ -22,26 +24,23 @@ async fn run_golden_tests() -> std::io::Result<()> {
             continue;
         }
 
-        let (tx_std, mut rx_std) = mpsc::channel(10);
-        let (tx_err, mut rx_err) = mpsc::channel(10);
+        let (tx, mut rx) = mpsc::channel(10);
 
-        let (result, stdout, stderr) = tokio::join!(
-            run_config(&parent_dir, &path, tx_std, tx_err),
-            async move {
-                let mut output = Vec::new();
-                while let Some(line) = rx_std.recv().await {
-                    output.push(line);
+        let (result, (stdout, stderr)) =
+            tokio::join!(run_config(&parent_dir, &path, tx), async move {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                while let Some(line) = rx.recv().await {
+                    match line {
+                        StatusMessage::StdOut(line) => stdout.push(line),
+                        StatusMessage::StdErr(line) => stderr.push(line),
+                        StatusMessage::TaskStarted { name } => {}
+                        StatusMessage::TaskFinished { name, result } => {}
+                    }
                 }
-                output
-            },
-            async move {
-                let mut output = Vec::new();
-                while let Some(line) = rx_err.recv().await {
-                    output.push(line);
-                }
-                output
-            },
-        );
+
+                (stdout, stderr)
+            });
 
         let golden_path = {
             // https://www.youtube.com/watch?v=jTqwe57ObFo
@@ -81,13 +80,11 @@ async fn run_golden_tests() -> std::io::Result<()> {
 async fn run_config(
     parent_dir: &Path,
     nurfile_path: &Path,
-    tx_std: Sender<String>,
-    tx_err: Sender<String>,
+    tx: Sender<StatusMessage>,
 ) -> miette::Result<()> {
     let ctx = nur_lib::commands::Context {
         cwd: parent_dir.to_owned(),
-        stdout: tx_std,
-        stderr: tx_err,
+        tx,
     };
 
     let task_command = nur_lib::commands::Task {

@@ -4,6 +4,8 @@ use miette::{Context, IntoDiagnostic};
 use question::{Answer, Question};
 use tokio::io::AsyncWriteExt;
 
+use crate::StatusMessage;
+
 pub struct Init {
     pub nur_file: Option<std::path::PathBuf>,
     pub dry_run: bool,
@@ -37,7 +39,7 @@ impl crate::commands::Command for Init {
                 panic!("nurfile already exists");
             }
         } else {
-            match crate::find_nurfile(&ctx.cwd, false) {
+            match crate::nurfile::find_nurfile(&ctx.cwd, false) {
                 Ok(_) => panic!("nurfile already exists"),
                 Err(e) => match e.downcast() {
                     Ok(crate::Error::NurfileNotFound { .. }) => {}
@@ -56,10 +58,10 @@ impl crate::commands::Command for Init {
             if path.exists() {
                 panic!("File already exists")
             } else {
-                ctx.stdout
-                    .send(format!(
+                ctx.tx
+                    .send(StatusMessage::StdOut(format!(
                         "[dryrun] Would create file {path:#?} with sample content."
-                    ))
+                    )))
                     .await
                     .into_diagnostic()?;
             }
@@ -79,8 +81,8 @@ impl crate::commands::Command for Init {
                     .into_diagnostic()?;
             }
 
-            ctx.stdout
-                .send(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task."))
+            ctx.tx
+                .send(StatusMessage::StdOut(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.")))
                 .await
                 .into_diagnostic()?;
         }

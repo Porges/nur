@@ -10,7 +10,7 @@ use tokio::{
     sync::{mpsc, oneshot},
 };
 
-use crate::nurfile::NurTask;
+use crate::{nurfile::NurTask, StatusMessage, TaskError, TaskResult};
 
 pub struct Task {
     pub dry_run: bool,
@@ -23,7 +23,7 @@ const DEFAULT_TASK_NAME: &str = "default";
 #[async_trait::async_trait]
 impl crate::commands::Command for Task {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
-        let (_, config) = crate::load_config(&ctx.cwd, &self.nur_file)?;
+        let (_, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         // validate no cycles
         {
@@ -100,13 +100,6 @@ impl Runner {
     }
 }
 
-#[derive(PartialEq)]
-enum TaskResult {
-    Skipped,
-    Cancelled,
-    RanToCompletion,
-}
-
 async fn run_tasks(
     ctx: &crate::commands::Context,
     task_names: &BTreeSet<String>,
@@ -138,16 +131,43 @@ async fn run_tasks(
             // and we will bail out, and thus will also not send a result
             if futures::future::try_join_all(await_upon).await.is_err() {
                 // don’t report this as an error; task cancelled
-                return Ok(TaskResult::Skipped);
+                let result = TaskResult::Skipped;
+                ctx.tx
+                    .send(StatusMessage::TaskFinished {
+                        name: run.task_name,
+                        result: Ok(result),
+                    })
+                    .await
+                    .into_diagnostic()?;
+                return Ok(result);
             }
 
-            let result = run_cmds(ctx, run.task_name, &run.task, &cancellation).await?;
-            if result == TaskResult::RanToCompletion {
+            ctx.tx
+                .send(StatusMessage::TaskStarted {
+                    name: run.task_name.clone(),
+                })
+                .await
+                .into_diagnostic()?;
+
+            let result = run_cmds(&ctx, &run.task, &cancellation).await;
+            if let Ok(TaskResult::RanToCompletion) = result {
+                // trigger dependent tasks,
                 // ignore failures from downstream tasks not existing
                 let _ = run.sender.send(());
             }
 
-            Ok(result)
+            ctx.tx
+                .send(StatusMessage::TaskFinished {
+                    name: run.task_name.clone(),
+                    result: result.clone(),
+                })
+                .await
+                .into_diagnostic()?;
+
+            Ok(result.map_err(|e| crate::Error::TaskFailed {
+                task_name: run.task_name,
+                task_error: e,
+            })?)
         });
     }
 
@@ -155,12 +175,16 @@ async fn run_tasks(
 }
 
 async fn run_cmds(
-    ctx: crate::commands::Context,
-    task_name: String,
+    ctx: &crate::commands::Context,
     task: &NurTask,
     cancellation: &tokio_util::sync::CancellationToken,
-) -> miette::Result<TaskResult> {
+) -> Result<TaskResult, TaskError> {
     for cmd in &task.commands {
+        // last check before starting process
+        if cancellation.is_cancelled() {
+            return Ok(TaskResult::Cancelled);
+        }
+
         let mut child = tokio::process::Command::new("/bin/sh")
             .args(["-c", &cmd.sh])
             .current_dir(&ctx.cwd)
@@ -169,16 +193,18 @@ async fn run_cmds(
             .stderr(std::process::Stdio::piped())
             .envs(&cmd.env)
             .group_spawn()
-            .into_diagnostic()?;
+            .map_err(|e| TaskError::IoError { kind: e.kind() })?;
 
         let ((), (), status) = tokio::join!(
             spawn_reader(
                 child.inner().stdout.take().expect("no stdout handle"),
-                ctx.stdout.clone()
+                ctx.tx.clone(),
+                StatusMessage::StdOut,
             ),
             spawn_reader(
                 child.inner().stderr.take().expect("no stderr handle"),
-                ctx.stderr.clone()
+                ctx.tx.clone(),
+                StatusMessage::StdErr,
             ),
             async move {
                 tokio::select! {
@@ -195,15 +221,13 @@ async fn run_cmds(
         );
 
         if let Some(status) = status {
-            let status = status.into_diagnostic()?;
+            let status = status.map_err(|e| TaskError::IoError { kind: e.kind() })?;
             if !cmd.ignore_result && status.code() != Some(0) {
                 cancellation.cancel();
-                return Err(crate::Error::TaskFailed {
-                    task_name,
+                return Err(TaskError::Failed {
                     command: cmd.sh.clone(),
                     exit_status: status,
-                }
-                .into());
+                });
             }
         } else {
             // we were cancelled
@@ -214,14 +238,17 @@ async fn run_cmds(
     Ok(TaskResult::RanToCompletion)
 }
 
-async fn spawn_reader<R>(from: R, into: mpsc::Sender<String>)
-where
+async fn spawn_reader<R>(
+    from: R,
+    into: mpsc::Sender<StatusMessage>,
+    f: impl Fn(String) -> StatusMessage,
+) where
     R: AsyncRead + Send + 'static,
     BufReader<R>: Unpin,
 {
     let mut reader = BufReader::new(from).lines();
     while let Ok(Some(line)) = reader.next_line().await {
-        if (into.send(line).await).is_err() {
+        if (into.send(f(line)).await).is_err() {
             break;
         }
     }

@@ -1,6 +1,8 @@
 use miette::IntoDiagnostic;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+use crate::StatusMessage;
+
 pub struct Check {
     pub nur_file: Option<std::path::PathBuf>,
 }
@@ -8,7 +10,7 @@ pub struct Check {
 #[async_trait::async_trait]
 impl crate::commands::Command for Check {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
-        let (path, config) = crate::load_config(&ctx.cwd, &self.nur_file)?;
+        let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         let mut has_error = false;
         for (task_name, task) in config.tasks {
@@ -18,18 +20,28 @@ impl crate::commands::Command for Check {
                     has_error = true;
                     let message =
                         format!("Error(s) in task ‘{task_name}’ command {ix}: `{}`", cmd.sh);
-                    ctx.stderr.send(message).await.into_diagnostic()?;
+                    ctx.tx
+                        .send(StatusMessage::StdErr(message))
+                        .await
+                        .into_diagnostic()?;
+
                     for line in errors {
                         let line = "\t".to_owned() + &line;
-                        ctx.stderr.send(line).await.into_diagnostic()?;
+                        ctx.tx
+                            .send(StatusMessage::StdErr(line))
+                            .await
+                            .into_diagnostic()?;
                     }
                 }
             }
         }
 
         if !has_error {
-            ctx.stdout
-                .send(format!("No syntax errors found in {}", path.display()))
+            ctx.tx
+                .send(StatusMessage::StdOut(format!(
+                    "No syntax errors found in {}",
+                    path.display()
+                )))
                 .await
                 .into_diagnostic()?;
         }

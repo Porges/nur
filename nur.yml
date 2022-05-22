@@ -23,7 +23,10 @@ build-binary:
       env: { TARGET: x86_64-unknown-linux-musl }
 
 test-failure:
-    deps: [slow, fail]
+    deps: [afterSlow, fail]
+
+afterSlow:
+    deps: [slow]
 
 slow:
     run: sleep 20

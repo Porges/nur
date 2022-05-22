@@ -2,15 +2,9 @@ pub mod commands;
 pub mod nurfile;
 pub mod version;
 
-#[cfg(feature = "kdl")]
-pub mod nurfile_kdl;
+use std::path::PathBuf;
 
-#[cfg(feature = "yaml")]
-pub mod nurfile_yaml;
-
-use std::path::{Path, PathBuf};
-
-use miette::{Diagnostic, IntoDiagnostic};
+use miette::Diagnostic;
 use thiserror::Error;
 use version::Version;
 
@@ -58,93 +52,43 @@ pub enum Error {
     )]
     NoSuchTask { task_name: String },
 
-    #[error("Task ‘{task_name}’ failed ({exit_status}) when executing command: `{command}`")]
+    #[error("Task ‘{task_name}’ failed: {task_error}")]
     #[diagnostic(code(nur::task_failed))]
     TaskFailed {
         task_name: String,
-        command: String,
-        exit_status: std::process::ExitStatus,
+        task_error: TaskError,
     },
 }
 
 type Result<T> = miette::Result<T>;
 
-pub fn load_config(
-    initial_dir: &Path,
-    file: &Option<impl AsRef<Path>>,
-) -> Result<(PathBuf, nurfile::NurFile)> {
-    let (path, nurconfig) = read_nurfile(initial_dir, file)?;
-    Ok((path, nurconfig))
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub enum TaskResult {
+    Skipped,
+    Cancelled,
+    RanToCompletion,
 }
 
-type NurfileParser = dyn Fn(&std::path::Path, &str) -> miette::Result<nurfile::NurFile>;
-
-const FORMATS: &[(&str, &NurfileParser)] = &[
-    #[cfg(feature = "kdl")]
-    ("nur.kdl", &nurfile_kdl::parse),
-    #[cfg(feature = "yaml")]
-    ("nur.yml", &nurfile_yaml::parse),
-    #[cfg(feature = "yaml")]
-    ("nur.yaml", &nurfile_yaml::parse),
-];
-
-pub fn find_nurfile(
-    initial_dir: &Path,
-    check_parents: bool,
-) -> Result<(PathBuf, &'static NurfileParser)> {
-    for root in initial_dir.ancestors() {
-        let mut files_to_check: Vec<(PathBuf, &NurfileParser)> = Vec::new();
-        for format in FORMATS {
-            let file = root.join(format.0);
-            if file.exists() {
-                files_to_check.push((file, format.1));
-            }
-        }
-
-        if files_to_check.len() > 1 {
-            return Err(Error::MultipleNurFilesFound {
-                directory: root.to_owned(),
-                files: files_to_check.into_iter().map(|(path, _)| path).collect(),
-            }
-            .into());
-        }
-
-        if let Some(file) = files_to_check.pop() {
-            return Ok(file);
-        }
-
-        if !check_parents {
-            break;
-        }
-    }
-
-    // hit top level without finding file:
-    Err(Error::NurfileNotFound {
-        directory: initial_dir.to_owned(),
-    }
-    .into())
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum TaskError {
+    #[error("external command failed ({exit_status}) when executing: `{command}`")]
+    Failed {
+        command: String,
+        exit_status: std::process::ExitStatus,
+    },
+    #[error("I/O error: {kind}")]
+    IoError { kind: std::io::ErrorKind },
 }
 
-pub fn read_nurfile(
-    initial_dir: &Path,
-    file: &Option<impl AsRef<Path>>,
-) -> Result<(PathBuf, nurfile::NurFile)> {
-    let file = match file {
-        Some(x) => (
-            x.as_ref().to_owned(),
-            &nurfile_yaml::parse as &NurfileParser,
-        ),
-        None => find_nurfile(initial_dir, true)?,
-    };
-
-    let contents = std::fs::read_to_string(&file.0).into_diagnostic()?;
-    let parsed = (file.1)(&file.0, &contents)?;
-    /* TODO: this hides the inner diagnostics
-        .map_err(|inner| Error::NurfileSyntaxError {
-            path: file.0.clone(),
-            inner,
-        })?;
-    */
-
-    Ok((file.0, parsed))
+#[derive(Debug)]
+pub enum StatusMessage {
+    StdOut(String),
+    StdErr(String),
+    TaskStarted {
+        name: String,
+    },
+    TaskFinished {
+        name: String,
+        result: std::result::Result<TaskResult, TaskError>,
+    },
 }

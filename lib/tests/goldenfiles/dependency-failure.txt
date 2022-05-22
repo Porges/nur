@@ -3,5 +3,5 @@
 --- error ---
 nur::task_failed
 
-  × Task ‘c’ failed (exit status: 100) when executing command: `exit 100`
+  × Task ‘c’ failed: external command failed (exit status: 100) when executing: `exit 100`
 

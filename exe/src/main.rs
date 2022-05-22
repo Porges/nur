@@ -67,36 +67,48 @@ async fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let command = build_command(cli);
 
-    let (tx_std, mut rx_std) = tokio::sync::mpsc::channel::<String>(1000);
-    let (tx_err, mut rx_err) = tokio::sync::mpsc::channel::<String>(1000);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<nur_lib::StatusMessage>(1000);
 
-    let stdout_writer = async move {
+    let handler = async move {
         let mut stdout = tokio::io::stdout();
-        while let Some(mut line) = rx_std.recv().await {
-            line.push('\n');
-            if stdout.write_all(line.as_bytes()).await.is_err() {
-                break;
-            }
-        }
-    };
-
-    let stderr_writer = async move {
         let mut stderr = tokio::io::stderr();
-        while let Some(mut line) = rx_err.recv().await {
-            line.push('\n');
-            if stderr.write_all(line.as_bytes()).await.is_err() {
-                break;
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                nur_lib::StatusMessage::StdOut(mut line) => {
+                    line.push('\n');
+                    if stdout.write_all(line.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                nur_lib::StatusMessage::StdErr(mut line) => {
+                    line.push('\n');
+                    if stderr.write_all(line.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                nur_lib::StatusMessage::TaskStarted { name } => {
+                    let msg = format!("--- Started task ‘{name}’\n");
+                    if stdout.write_all(msg.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                nur_lib::StatusMessage::TaskFinished { name, result } => {
+                    let msg = match result {
+                        Ok(r) => format!("--- Task ‘{name}’ completed: {r:?}\n"),
+                        Err(r) => format!("--- Task ‘{name}’ failed: {r}\n"),
+                    };
+
+                    if stdout.write_all(msg.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
             }
         }
     };
 
-    let ctx = nur_lib::commands::Context {
-        cwd,
-        stdout: tx_std,
-        stderr: tx_err,
-    };
-
-    let (result, (), ()) = tokio::join!(command.run(ctx), stdout_writer, stderr_writer);
+    let ctx = nur_lib::commands::Context { cwd, tx };
+    let (result, ()) = tokio::join!(command.run(ctx), handler);
     result
 }
 
