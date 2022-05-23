@@ -5,20 +5,33 @@ use std::{
 };
 
 use goldenfile::Mint;
+use miette::IntoDiagnostic;
 use tokio::sync::mpsc::{self, Sender};
 
 use nur_lib::{commands::Command, commands::Message};
 
 #[tokio::test]
-async fn run_golden_tests() -> std::io::Result<()> {
+async fn run_golden_tests() -> miette::Result<()> {
+    // override default hook,  since we need the output
+    // to be consistent regardless of where it is running
+    miette::set_hook(Box::new(|_diag| {
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .terminal_links(false)
+                .unicode(true)
+                .width(132)
+                .build(),
+        )
+    }))?;
+
     std::env::set_var("NO_COLOR", "1");
 
     let parent_dir: PathBuf = "tests/goldenfiles".into();
     let mut mint = Mint::new(&parent_dir);
 
     let yaml_extension: std::ffi::OsString = "yml".into();
-    for entry in fs::read_dir(&parent_dir)? {
-        let entry = entry?;
+    for entry in fs::read_dir(&parent_dir).into_diagnostic()? {
+        let entry = entry.into_diagnostic()?;
         let path = entry.path();
         if path.extension() != Some(&yaml_extension) {
             continue;
@@ -47,29 +60,8 @@ async fn run_golden_tests() -> std::io::Result<()> {
             name
         };
 
-        let mut golden = mint.new_goldenfile(&golden_path)?;
-
-        golden.write_all(b"--- stdout ---\n")?;
-        for line in stdout {
-            golden.write_all(line.as_bytes())?;
-            golden.write_all(b"\n")?;
-        }
-
-        golden.write_all(b"--- stderr ---\n")?;
-        for line in stderr {
-            golden.write_all(line.as_bytes())?;
-            golden.write_all(b"\n")?;
-        }
-
-        if let Err(e) = result {
-            let str = format!("{:?}", e);
-
-            golden.write_all(b"--- error ---\n")?;
-            golden.write_all(str.as_bytes())?;
-            golden.write_all(b"\n")?;
-        }
-
-        golden.flush()?;
+        let golden = mint.new_goldenfile(&golden_path).into_diagnostic()?;
+        write_outputs(golden, stdout, stderr, result).into_diagnostic()?;
     }
 
     Ok(())
@@ -93,4 +85,35 @@ async fn run_config(
 
     let result = task_command.run(ctx).await?;
     Ok(result)
+}
+
+fn write_outputs(
+    mut golden: std::fs::File,
+    stdout: Vec<String>,
+    stderr: Vec<String>,
+    result: miette::Result<()>,
+) -> std::io::Result<()> {
+    golden.write_all(b"--- stdout ---\n")?;
+    for line in stdout {
+        golden.write_all(line.as_bytes())?;
+        golden.write_all(b"\n")?;
+    }
+
+    golden.write_all(b"--- stderr ---\n")?;
+    for line in stderr {
+        golden.write_all(line.as_bytes())?;
+        golden.write_all(b"\n")?;
+    }
+
+    if let Err(e) = result {
+        let str = format!("{:?}", e);
+
+        golden.write_all(b"--- error ---\n")?;
+        golden.write_all(str.as_bytes())?;
+        golden.write_all(b"\n")?;
+    }
+
+    golden.flush()?;
+
+    Ok(())
 }
