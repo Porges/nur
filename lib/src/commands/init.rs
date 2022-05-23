@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use miette::{Context, IntoDiagnostic};
+use miette::IntoDiagnostic;
 use question::{Answer, Question};
 use tokio::io::AsyncWriteExt;
 

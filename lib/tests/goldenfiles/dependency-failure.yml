@@ -1,10 +1,10 @@
 version: 1.0
 
 default:
-  deps: [a, b]
+  after: [a, b]
 
-a: { deps: [c] }
-b: { deps: [c] }
+a: { after: [c] }
+b: { after: [c] }
 
 c:
   run:

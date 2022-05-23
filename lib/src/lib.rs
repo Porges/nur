@@ -87,8 +87,14 @@ pub enum TaskError {
 
 #[derive(Debug)]
 pub enum StatusMessage {
-    StdOut(String),
-    StdErr(String),
+    StdOut {
+        task_name: String,
+        line: String,
+    },
+    StdErr {
+        task_name: String,
+        line: String,
+    },
     TaskStarted {
         name: String,
     },

@@ -1,6 +1,6 @@
 version: 1.0
 
-default: { deps: [a] }
-a: { deps: [b] }
-b: { deps: [c] }
-c: { deps: [default] }
+default: { after: [a] }
+a: { after: [b] }
+b: { after: [c] }
+c: { after: [default] }

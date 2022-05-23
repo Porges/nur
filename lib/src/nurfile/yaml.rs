@@ -9,10 +9,33 @@ pub struct NurYaml {
     version: crate::version::Version,
 
     #[serde(default)]
+    options: Options,
+
+    #[serde(default)]
     shared: Shared,
 
     #[serde(flatten)]
     tasks: BTreeMap<String, Task>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Options {
+    #[serde(default)]
+    output: Option<OutputOptions>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct OutputOptions {
+    #[serde(default)]
+    prefix: Option<Prefix>,
+}
+
+#[derive(Deserialize)]
+enum Prefix {
+    Always,
+    Aligned,
 }
 
 #[derive(Deserialize, Default)]
@@ -27,10 +50,13 @@ pub struct Shared {
 #[serde(deny_unknown_fields)]
 pub struct Task {
     #[serde(default)]
-    #[serde_as(deserialize_as = "serde_with::OneOrMany<serde_with::PickFirst<(_, serde_with::DisplayFromStr)>>")]
+    #[serde_as(
+        deserialize_as = "serde_with::OneOrMany<serde_with::PickFirst<(_, serde_with::DisplayFromStr)>>"
+    )]
     run: Vec<Command>,
 
-    #[serde(alias = "deps", default)]
+    #[serde(alias = "after", default)]
+    #[serde_as(deserialize_as = "serde_with::OneOrMany<_>")]
     dependencies: Vec<String>,
 
     #[serde(alias = "desc", default)]
@@ -67,6 +93,7 @@ impl From<NurYaml> for crate::nurfile::NurFile {
     fn from(me: NurYaml) -> Self {
         crate::nurfile::NurFile {
             version: me.version,
+            options: me.options.into(),
             lets: vec![],
             env: me.shared.environment,
             tasks: BTreeMap::from_iter(me.tasks.into_iter().map(|(n, t)| {
@@ -80,6 +107,31 @@ impl From<NurYaml> for crate::nurfile::NurFile {
                     },
                 )
             })),
+        }
+    }
+}
+
+impl From<Options> for crate::nurfile::Options {
+    fn from(o: Options) -> Self {
+        crate::nurfile::Options {
+            output: o.output.map(Into::into).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<OutputOptions> for crate::nurfile::OutputOptions {
+    fn from(o: OutputOptions) -> Self {
+        crate::nurfile::OutputOptions {
+            prefix: o.prefix.map(Into::into).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<Prefix> for crate::nurfile::PrefixStyle {
+    fn from(p: Prefix) -> Self {
+        match p {
+            Prefix::Always => crate::nurfile::PrefixStyle::Always,
+            Prefix::Aligned => crate::nurfile::PrefixStyle::Aligned,
         }
     }
 }

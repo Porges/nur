@@ -2,7 +2,7 @@
 version: "1.0"
 
 default:
-  deps: [runString, runSh]
+  after: [runString, runSh]
   run:
   - echo 'plain cmd'
   - sh: echo 'alternate cmd'

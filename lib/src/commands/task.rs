@@ -9,6 +9,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     sync::{mpsc, oneshot},
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{nurfile::NurTask, StatusMessage, TaskError, TaskResult};
 
@@ -25,8 +26,7 @@ impl crate::commands::Command for Task {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
-        // validate no cycles
-        {
+        let graph = {
             let mut graph: DiGraphMap<&str, ()> = DiGraphMap::new();
             for (name, data) in &config.tasks {
                 graph.add_node(name);
@@ -34,14 +34,19 @@ impl crate::commands::Command for Task {
                     graph.add_edge(name, dep, ());
                 }
             }
+            graph
+        };
 
-            algo::toposort(&graph, None).map_err(|cyc| crate::Error::TaskCycle {
-                path,
-                task_name: cyc.node_id().to_owned(),
-            })?;
-        }
+        // validate no cycles in graph
+        algo::toposort(&graph, None).map_err(|cyc| crate::Error::TaskCycle {
+            path,
+            task_name: cyc.node_id().to_owned(),
+        })?;
 
-        let output = crate::output::from_config(&config);
+        let execution_order = get_execution_order(graph, &self.task_names);
+
+        let longest_name = execution_order.iter().map(|x| x.len()).max();
+        let output = crate::output::from_config(&config, longest_name);
 
         let (tx, rx) = mpsc::channel::<crate::StatusMessage>(100);
         let local_ctx = LocalContext {
@@ -50,7 +55,7 @@ impl crate::commands::Command for Task {
         };
 
         let (task_results, ()) = tokio::join!(
-            run_tasks(local_ctx, &self.task_names, config.tasks),
+            run_tasks(local_ctx, execution_order, &config.tasks),
             output.handle(&ctx, rx),
         );
 
@@ -66,136 +71,150 @@ impl crate::commands::Command for Task {
     }
 }
 
+fn get_execution_order<'a>(
+    graph: DiGraphMap<&'a str, ()>,
+    tasks: &'a BTreeSet<String>,
+) -> Vec<&'a str> {
+    let mut to_visit = {
+        if tasks.is_empty() {
+            VecDeque::from([DEFAULT_TASK_NAME])
+        } else {
+            VecDeque::from_iter(tasks.iter().map(|x| x.as_str()))
+        }
+    };
+
+    let mut visitor = petgraph::visit::DfsPostOrder::new(
+        &graph,
+        to_visit
+            .pop_front()
+            .expect("always at least one in to_visit"),
+    );
+
+    // build the execution order for the graph
+    // this iterates from the first to_visit member
+    let mut run_order = Vec::new();
+    while let Some(nx) = visitor.next(&graph) {
+        run_order.push(nx);
+    }
+
+    // now visit the rest of the to_visit members
+    while let Some(start) = to_visit.pop_front() {
+        visitor.move_to(start);
+        while let Some(nx) = visitor.next(&graph) {
+            run_order.push(nx);
+        }
+    }
+
+    run_order
+}
+
 #[derive(Clone)]
 struct LocalContext {
     cwd: std::path::PathBuf,
     tx: mpsc::Sender<crate::StatusMessage>,
 }
 
-struct TaskToRun {
-    task_name: String,
-    task: crate::nurfile::NurTask,
-    sender: oneshot::Sender<()>,
-}
-
-struct Runner {
-    receivers: BTreeMap<String, Shared<oneshot::Receiver<()>>>,
-    to_run: VecDeque<TaskToRun>,
-    tasks: BTreeMap<String, NurTask>,
-}
-
-impl Runner {
-    fn new(tasks: BTreeMap<String, NurTask>) -> Self {
-        Runner {
-            receivers: Default::default(),
-            to_run: Default::default(),
-            tasks,
-        }
-    }
-
-    pub fn enqueue_task(
-        &mut self,
-        task_name: &str,
-    ) -> miette::Result<&Shared<oneshot::Receiver<()>>> {
-        if self.receivers.contains_key(task_name) {
-            Ok(&self.receivers[task_name])
-        } else {
-            let (task_name, task) =
-                self.tasks
-                    .remove_entry(task_name)
-                    .ok_or_else(|| crate::Error::NoSuchTask {
-                        task_name: task_name.to_string(),
-                    })?;
-
-            let (sender, receiver) = oneshot::channel();
-            self.receivers.insert(task_name.clone(), receiver.shared());
-            let result = &self.receivers[&task_name];
-            self.to_run.push_back(TaskToRun {
-                task_name,
-                task,
-                sender,
-            });
-            Ok(result)
-        }
-    }
-}
-
 async fn run_tasks(
     ctx: LocalContext,
-    task_names: &BTreeSet<String>,
-    tasks: BTreeMap<String, NurTask>,
+    run_order: Vec<&str>,
+    tasks: &BTreeMap<String, NurTask>,
 ) -> miette::Result<Vec<miette::Result<TaskResult>>> {
-    let mut r = Runner::new(tasks);
-    if task_names.is_empty() {
-        r.enqueue_task(DEFAULT_TASK_NAME)?;
-    } else {
-        for task_name in task_names {
-            r.enqueue_task(task_name)?;
+    let cancellation = CancellationToken::new();
+    let mut spawned = Vec::with_capacity(run_order.len());
+
+    let mut so_far: BTreeMap<&str, Shared<oneshot::Receiver<()>>> = BTreeMap::new();
+    for task_name in run_order {
+        let task = tasks
+            .get(task_name)
+            .ok_or_else(|| crate::Error::NoSuchTask {
+                task_name: task_name.to_string(),
+            })?;
+
+        // get receivers for all dependencies:
+        let mut await_on = Vec::new();
+        for dependency in &task.dependencies {
+            let recvr =
+                so_far
+                    .get(dependency.as_str())
+                    .ok_or_else(|| crate::Error::NoSuchTask {
+                        task_name: dependency.to_string(),
+                    })?;
+
+            await_on.push(recvr.clone());
         }
-    }
 
-    let mut spawned: Vec<_> = Vec::new();
+        let (sender, receiver) = oneshot::channel();
+        so_far.insert(task_name, receiver.shared());
 
-    let cancellation = tokio_util::sync::CancellationToken::new();
-
-    while let Some(run) = r.to_run.pop_front() {
-        let ctx = ctx.clone();
-        let mut await_upon = Vec::new();
-        for dep in &run.task.dependencies {
-            await_upon.push(r.enqueue_task(dep)?.clone());
-        }
-
-        let cancellation = cancellation.clone();
-        spawned.push(async move {
-            // if upstream task failed it will not send a result,
-            // and we will bail out, and thus will also not send a result
-            if futures::future::try_join_all(await_upon).await.is_err() {
-                // don’t report this as an error; task cancelled
-                let result = TaskResult::Skipped;
-                ctx.tx
-                    .send(StatusMessage::TaskFinished {
-                        name: run.task_name,
-                        result: Ok(result),
-                    })
-                    .await
-                    .into_diagnostic()?;
-                return Ok(result);
-            }
-
-            ctx.tx
-                .send(StatusMessage::TaskStarted {
-                    name: run.task_name.clone(),
-                })
-                .await
-                .into_diagnostic()?;
-
-            let result = run_cmds(&ctx, &run.task, &cancellation).await;
-            if let Ok(TaskResult::RanToCompletion) = result {
-                // trigger dependent tasks,
-                // ignore failures from downstream tasks not existing
-                let _ = run.sender.send(());
-            }
-
-            ctx.tx
-                .send(StatusMessage::TaskFinished {
-                    name: run.task_name.clone(),
-                    result: result.clone(),
-                })
-                .await
-                .into_diagnostic()?;
-
-            Ok(result.map_err(|e| crate::Error::TaskFailed {
-                task_name: run.task_name,
-                task_error: e,
-            })?)
-        });
+        spawned.push(run_task(
+            ctx.clone(),
+            cancellation.clone(),
+            await_on,
+            task_name,
+            task,
+            sender,
+        ));
     }
 
     Ok(futures::future::join_all(spawned).await)
 }
 
+/// Executes a single task and emits start/stop events.
+async fn run_task(
+    ctx: LocalContext,
+    cancellation: CancellationToken,
+    await_on: Vec<Shared<oneshot::Receiver<()>>>,
+    task_name: &str,
+    task: &NurTask,
+    done: oneshot::Sender<()>,
+) -> miette::Result<TaskResult> {
+    // if upstream task failed it will not trigger its "done" sender,
+    // and we will bail out, and thus will also not send a result
+    if futures::future::try_join_all(await_on).await.is_err() {
+        // don’t report this as an error; task cancelled
+        let result = TaskResult::Skipped;
+        ctx.tx
+            .send(StatusMessage::TaskFinished {
+                name: task_name.to_string(),
+                result: Ok(result),
+            })
+            .await
+            .into_diagnostic()?;
+        return Ok(result);
+    }
+
+    ctx.tx
+        .send(StatusMessage::TaskStarted {
+            name: task_name.to_string(),
+        })
+        .await
+        .into_diagnostic()?;
+
+    let result = run_cmds(&ctx, task_name, task, &cancellation).await;
+    if let Ok(TaskResult::RanToCompletion) = result {
+        // trigger dependent tasks,
+        // ignore failures from downstream tasks not existing
+        let _ = done.send(());
+    }
+
+    ctx.tx
+        .send(StatusMessage::TaskFinished {
+            name: task_name.to_string(),
+            result: result.clone(),
+        })
+        .await
+        .into_diagnostic()?;
+
+    Ok(result.map_err(|e| crate::Error::TaskFailed {
+        task_name: task_name.to_string(),
+        task_error: e,
+    })?)
+}
+
+/// Executes the commands for a single task.
 async fn run_cmds(
     ctx: &LocalContext,
+    task_name: &str,
     task: &NurTask,
     cancellation: &tokio_util::sync::CancellationToken,
 ) -> Result<TaskResult, TaskError> {
@@ -211,6 +230,7 @@ async fn run_cmds(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
+            .envs(&task.env) // task environment is overridden by cmd
             .envs(&cmd.env)
             .group_spawn()
             .map_err(|e| TaskError::IoError { kind: e.kind() })?;
@@ -219,12 +239,18 @@ async fn run_cmds(
             spawn_reader(
                 child.inner().stdout.take().expect("no stdout handle"),
                 ctx.tx.clone(),
-                StatusMessage::StdOut,
+                |line| StatusMessage::StdOut {
+                    task_name: task_name.to_string(),
+                    line
+                },
             ),
             spawn_reader(
                 child.inner().stderr.take().expect("no stderr handle"),
                 ctx.tx.clone(),
-                StatusMessage::StdErr,
+                |line| StatusMessage::StdErr {
+                    task_name: task_name.to_string(),
+                    line
+                },
             ),
             async move {
                 tokio::select! {

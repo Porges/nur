@@ -23,10 +23,10 @@ build-binary:
       env: { TARGET: x86_64-unknown-linux-musl }
 
 test-failure:
-    deps: [afterSlow, fail]
+    after: [afterSlow, fail]
 
 afterSlow:
-    deps: [slow]
+    after: [slow]
 
 slow:
     run: sleep 20
@@ -36,8 +36,18 @@ fail:
     - sleep 2
     - exit 123
 
+test-duplicate-dep:
+    after: [d1, d2, d3]
+
+d1: { after: d4 }
+d2: { after: d4 }
+d3: { after: d4 }
+
+d4:
+    run: echo 'hi!'
+
 test-parallel:
-    deps: [sleep1, sleep2]
+    after: [sleep1, sleep2]
 
 sleep1:
     run:

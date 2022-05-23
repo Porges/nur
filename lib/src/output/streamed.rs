@@ -1,6 +1,8 @@
 use crate::{commands::Message, StatusMessage, TaskResult};
 
-pub struct Streamed {}
+pub struct Streamed {
+    pub prefixer: Box<dyn Fn() -> Box<dyn crate::output::Prefixer + Send> + Sync + Send>,
+}
 
 #[async_trait::async_trait]
 impl crate::output::Output for Streamed {
@@ -9,20 +11,24 @@ impl crate::output::Output for Streamed {
         ctx: &crate::commands::Context,
         mut rx: tokio::sync::mpsc::Receiver<crate::StatusMessage>,
     ) {
+        let mut prefixer = (self.prefixer)();
         while let Some(msg) = rx.recv().await {
             match msg {
-                StatusMessage::StdOut(line) => {
+                StatusMessage::StdOut { task_name, line } => {
+                    let line = prefixer.prefix(&task_name, line);
                     if ctx.output.send(Message::Out(line)).await.is_err() {
                         break;
                     }
                 }
-                StatusMessage::StdErr(line) => {
+                StatusMessage::StdErr { task_name, line } => {
+                    let line = prefixer.prefix(&task_name, line);
                     if ctx.output.send(Message::Err(line)).await.is_err() {
                         break;
                     }
                 }
                 StatusMessage::TaskStarted { name } => {
                     let msg = format!("— Started task ‘{name}’");
+                    let msg = prefixer.prefix(&name, msg);
                     if ctx.output.send(Message::Out(msg)).await.is_err() {
                         break;
                     }
@@ -39,6 +45,7 @@ impl crate::output::Output for Streamed {
                         Err(r) => format!("— Task ‘{name}’ failed: {r}"),
                     };
 
+                    let msg = prefixer.prefix(&name, msg);
                     if ctx.output.send(Message::Out(msg)).await.is_err() {
                         break;
                     }

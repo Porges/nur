@@ -15,11 +15,36 @@ use miette::IntoDiagnostic;
 pub struct NurFile {
     pub version: crate::version::Version,
 
+    pub options: Options,
+
     pub lets: Vec<Let>,
 
     pub tasks: BTreeMap<String, NurTask>,
 
     pub env: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Default)]
+pub struct Options {
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Default)]
+pub struct OutputOptions {
+    pub prefix: PrefixStyle,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum PrefixStyle {
+    NoPrefix,
+    Always,
+    Aligned,
+}
+
+impl Default for PrefixStyle {
+    fn default() -> Self {
+        PrefixStyle::Aligned
+    }
 }
 
 #[derive(Debug)]
