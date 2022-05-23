@@ -51,7 +51,7 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
     }
 
     if cli.dry_run {
-        panic!("dry-run not yet supported");
+        todo!("dry-run not yet supported");
     }
 
     Box::new(commands::Task {
