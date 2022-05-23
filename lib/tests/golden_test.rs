@@ -19,12 +19,11 @@ async fn run_golden_tests() -> miette::Result<()> {
             miette::MietteHandlerOpts::new()
                 .terminal_links(false)
                 .unicode(true)
+                .color(false)
                 .width(132)
                 .build(),
         )
     }))?;
-
-    std::env::set_var("NO_COLOR", "1");
 
     let parent_dir: PathBuf = "tests/goldenfiles".into();
     let mut mint = Mint::new(&parent_dir);
