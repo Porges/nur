@@ -17,14 +17,18 @@ pub enum Error {
     #[diagnostic(code(nur::io_error))]
     IoError(#[from] std::io::Error),
 
-    #[error("Nurfile not found in ‘{directory}’, or any of its parent directories")]
+    #[error("Nur file not found in ‘{directory}’, or any of its parent directories")]
     #[diagnostic(
         code(nur::no_nur_files),
         help("try creating a nurfile with ‘nur --init’")
     )]
     NurfileNotFound { directory: PathBuf },
 
-    #[error("Multiple nurfiles found in ‘{directory}’")]
+    #[error("Nur file already exists at destination: {path:#?}")]
+    #[diagnostic(code(nur::nur_file_already_exists))]
+    NurfileAlreadyExists { path: PathBuf },
+
+    #[error("Multiple Nur files found in ‘{directory}’")]
     #[diagnostic(
         code(nur::multiple_nur_files),
         help("there should only be one nurfile per directory")
@@ -34,7 +38,7 @@ pub enum Error {
         files: Vec<PathBuf>,
     },
 
-    #[error("Nurfile had a syntax error")]
+    #[error("Nur file {path:#?} has a syntax error")]
     #[diagnostic(code(nur::syntax_error))]
     NurfileSyntaxError {
         path: PathBuf,
@@ -42,9 +46,9 @@ pub enum Error {
         inner: miette::Report,
     },
 
-    #[error("Nurfile has a task cycle involving task ‘{task_name}’")]
+    #[error("Nur file {path:#?} has a task cycle involving task ‘{task_name}’")]
     #[diagnostic(code(nur::task_cycle))]
-    TaskCycle { task_name: String },
+    TaskCycle { path: PathBuf, task_name: String },
 
     #[error("Unknown task ‘{task_name}’")]
     #[diagnostic(

@@ -23,7 +23,7 @@ const DEFAULT_TASK_NAME: &str = "default";
 #[async_trait::async_trait]
 impl crate::commands::Command for Task {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
-        let (_, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
+        let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         // validate no cycles
         {
@@ -36,6 +36,7 @@ impl crate::commands::Command for Task {
             }
 
             algo::toposort(&graph, None).map_err(|cyc| crate::Error::TaskCycle {
+                path,
                 task_name: cyc.node_id().to_owned(),
             })?;
         }

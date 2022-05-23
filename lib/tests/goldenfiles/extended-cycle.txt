@@ -3,5 +3,5 @@
 --- error ---
 nur::task_cycle
 
-  × Nurfile has a task cycle involving task ‘default’
+  × Nur file "tests/goldenfiles/extended-cycle.yml" has a task cycle involving task ‘default’
 

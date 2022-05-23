@@ -34,15 +34,21 @@ more:
 #[async_trait::async_trait]
 impl crate::commands::Command for Init {
     async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+        // ensure that we aren’t going to overwrite anything:
         if let Some(nur_file) = &self.nur_file {
             if nur_file.exists() {
-                panic!("nurfile already exists");
+                return Err(crate::Error::NurfileAlreadyExists {
+                    path: nur_file.clone(),
+                }
+                .into());
             }
         } else {
             match crate::nurfile::find_nurfile(&ctx.cwd, false) {
-                Ok(_) => panic!("nurfile already exists"),
+                Ok((path, _)) => return Err(crate::Error::NurfileAlreadyExists { path }.into()),
                 Err(e) => match e.downcast() {
-                    Ok(crate::Error::NurfileNotFound { .. }) => {}
+                    Ok(crate::Error::NurfileNotFound { .. }) => {
+                        // note that this is the only success case
+                    }
                     Ok(e) => return Err(e.into()),
                     Err(e) => return Err(e),
                 },
@@ -56,7 +62,7 @@ impl crate::commands::Command for Init {
 
         if self.dry_run {
             if path.exists() {
-                panic!("File already exists")
+                return Err(crate::Error::NurfileAlreadyExists { path }.into());
             } else {
                 ctx.output
                     .send(Message::Out(format!(
@@ -72,9 +78,12 @@ impl crate::commands::Command for Init {
                     .create_new(true)
                     .open(&path)
                     .await
-                    .into_diagnostic()
-                    .wrap_err_with(|| {
-                        format!("File already exists at destination ‘{}’", path.display())
+                    .map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::AlreadyExists {
+                            crate::Error::NurfileAlreadyExists { path: path.clone() }
+                        } else {
+                            crate::Error::IoError(e)
+                        }
                     })?;
 
                 file.write_all(DEFAULT_CONTENT.as_bytes())
