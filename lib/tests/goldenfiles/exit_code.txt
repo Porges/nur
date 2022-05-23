@@ -1,3 +1,5 @@
 --- stdout ---
+— Started task ‘default’
 ignored result!
+— Task ‘default’ completed
 --- stderr ---

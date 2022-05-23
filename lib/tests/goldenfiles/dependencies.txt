@@ -1,4 +1,10 @@
 --- stdout ---
+— Started task ‘hello’
 hello!
+— Task ‘hello’ completed
+— Started task ‘world’
 world
+— Task ‘world’ completed
+— Started task ‘default’
+— Task ‘default’ completed
 --- stderr ---

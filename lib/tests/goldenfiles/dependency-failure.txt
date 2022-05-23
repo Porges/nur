@@ -1,4 +1,9 @@
 --- stdout ---
+— Started task ‘c’
+— Task ‘c’ failed: external command failed (exit status: 100) when executing: `exit 100`
+— Task ‘a’ skipped
+— Task ‘b’ skipped
+— Task ‘default’ skipped
 --- stderr ---
 --- error ---
 nur::task_failed
