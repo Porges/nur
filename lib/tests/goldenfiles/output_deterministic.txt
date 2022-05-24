@@ -1,0 +1,14 @@
+--- stdout ---
+     t5: — Started task ‘t5’
+       : — Task ‘t5’ completed
+     t4: — Started task ‘t4’
+       : — Task ‘t4’ completed
+     t3: — Started task ‘t3’
+       : — Task ‘t3’ completed
+     t2: — Started task ‘t2’
+       : — Task ‘t2’ completed
+     t1: — Started task ‘t1’
+       : — Task ‘t1’ completed
+default: — Started task ‘default’
+       : — Task ‘default’ completed
+--- stderr ---

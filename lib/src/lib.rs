@@ -85,21 +85,18 @@ pub enum TaskError {
     IoError { kind: std::io::ErrorKind },
 }
 
-#[derive(Debug)]
-pub enum StatusMessage {
+#[derive(Debug, Clone)]
+pub enum TaskStatus {
     StdOut {
-        task_name: String,
         line: String,
     },
     StdErr {
-        task_name: String,
         line: String,
     },
-    TaskStarted {
-        name: String,
-    },
-    TaskFinished {
-        name: String,
+    Started {},
+    Finished {
         result: std::result::Result<TaskResult, TaskError>,
     },
 }
+
+pub type StatusMessage = (usize, TaskStatus);

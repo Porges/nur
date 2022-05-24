@@ -1,5 +1,5 @@
 --- stdout ---
-default │ — Started task ‘default’
-        │ Hello, world!
-        │ — Task ‘default’ completed
+default: — Started task ‘default’
+       : Hello, world!
+       : — Task ‘default’ completed
 --- stderr ---

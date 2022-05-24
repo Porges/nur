@@ -57,6 +57,7 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
         dry_run: cli.dry_run,
         nur_file: cli.file,
         task_names: BTreeSet::from_iter(cli.task_names),
+        output_override: None,
     })
 }
 

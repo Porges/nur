@@ -1,31 +1,33 @@
-use crate::{commands::Message, StatusMessage, TaskResult};
+use crate::{commands::Message, StatusMessage, TaskResult, TaskStatus};
 
 pub struct Streamed<O> {
     pub output: O,
     pub separator: String,
+    pub names: Vec<String>,
     pub prefixer: Box<dyn crate::output::Prefixer + Send + Sync>,
 }
 
 #[async_trait::async_trait]
 impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for Streamed<O> {
     async fn handle(&mut self, msg: crate::StatusMessage) {
-        let to_send = match msg {
-            StatusMessage::StdOut { task_name, line } => {
-                let prefix = self.prefixer.prefix(&task_name);
-                let line = format!("{prefix} {} {line}", self.separator);
+        let (task_id, status) = msg;
+        let name = &self.names[task_id];
+        let prefix = self.prefixer.prefix(name);
+
+        let to_send = match status {
+            TaskStatus::StdOut { line } => {
+                let line = format!("{prefix}{}{line}", self.separator);
                 Message::Out(line)
             }
-            StatusMessage::StdErr { task_name, line } => {
-                let prefix = self.prefixer.prefix(&task_name);
-                let line = format!("{prefix} {} {line}", self.separator);
+            TaskStatus::StdErr { line } => {
+                let line = format!("{prefix}{}{line}", self.separator);
                 Message::Err(line)
             }
-            StatusMessage::TaskStarted { name } => {
-                let prefix = self.prefixer.prefix(&name);
-                let line = format!("{prefix} {} — Started task ‘{name}’", self.separator);
+            TaskStatus::Started {} => {
+                let line = format!("{prefix}{}— Started task ‘{name}’", self.separator);
                 Message::Out(line)
             }
-            StatusMessage::TaskFinished { name, result } => {
+            TaskStatus::Finished { result } => {
                 let msg = match result {
                     Ok(TaskResult::Skipped) => format!("— Task ‘{name}’ skipped"),
                     Ok(TaskResult::RanToCompletion) => {
@@ -37,8 +39,7 @@ impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for
                     Err(r) => format!("— Task ‘{name}’ failed: {r}"),
                 };
 
-                let prefix = self.prefixer.prefix(&name);
-                let line = format!("{prefix} {} {msg}", self.separator);
+                let line = format!("{prefix}{}{msg}", self.separator);
                 Message::Out(line)
             }
         };

@@ -11,12 +11,16 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{nurfile::NurTask, StatusMessage, TaskError, TaskResult};
+use crate::{
+    nurfile::{NurTask, OutputOptions},
+    StatusMessage, TaskError, TaskResult, TaskStatus,
+};
 
 pub struct Task {
     pub dry_run: bool,
     pub nur_file: Option<std::path::PathBuf>,
     pub task_names: BTreeSet<String>,
+    pub output_override: Option<OutputOptions>,
 }
 
 const DEFAULT_TASK_NAME: &str = "default";
@@ -45,8 +49,14 @@ impl crate::commands::Command for Task {
 
         let execution_order = get_execution_order(graph, &self.task_names);
 
-        let longest_name = execution_order.iter().map(|x| x.len()).max();
-        let mut output = crate::output::from_config(ctx.stdout, ctx.stderr, &config, longest_name);
+        let mut output = crate::output::create(
+            ctx.stdout,
+            ctx.stderr,
+            self.output_override
+                .as_ref()
+                .unwrap_or(&config.options.output),
+            &execution_order,
+        );
 
         let (tx, mut rx) = mpsc::channel::<crate::StatusMessage>(100);
         let local_ctx = LocalContext {
@@ -127,7 +137,7 @@ async fn run_tasks(
     let mut spawned = Vec::with_capacity(run_order.len());
 
     let mut so_far: BTreeMap<&str, Shared<oneshot::Receiver<()>>> = BTreeMap::new();
-    for task_name in run_order {
+    for (task_id, task_name) in run_order.into_iter().enumerate() {
         let task = tasks
             .get(task_name)
             .ok_or_else(|| crate::Error::NoSuchTask {
@@ -154,7 +164,7 @@ async fn run_tasks(
             ctx.clone(),
             cancellation.clone(),
             await_on,
-            task_name,
+            task_id,
             task,
             sender,
         ));
@@ -168,7 +178,7 @@ async fn run_task(
     ctx: LocalContext,
     cancellation: CancellationToken,
     await_on: Vec<Shared<oneshot::Receiver<()>>>,
-    task_name: &str,
+    task_id: usize,
     task: &NurTask,
     done: oneshot::Sender<()>,
 ) -> miette::Result<TaskResult> {
@@ -178,23 +188,18 @@ async fn run_task(
         // don’t report this as an error; task cancelled
         let result = TaskResult::Skipped;
         ctx.tx
-            .send(StatusMessage::TaskFinished {
-                name: task_name.to_string(),
-                result: Ok(result),
-            })
+            .send((task_id, TaskStatus::Finished { result: Ok(result) }))
             .await
             .into_diagnostic()?;
         return Ok(result);
     }
 
     ctx.tx
-        .send(StatusMessage::TaskStarted {
-            name: task_name.to_string(),
-        })
+        .send((task_id, TaskStatus::Started {}))
         .await
         .into_diagnostic()?;
 
-    let result = run_cmds(&ctx, task_name, task, &cancellation).await;
+    let result = run_cmds(&ctx, task_id, task, &cancellation).await;
     if let Ok(TaskResult::RanToCompletion) = result {
         // trigger dependent tasks,
         // ignore failures from downstream tasks not existing
@@ -202,15 +207,18 @@ async fn run_task(
     }
 
     ctx.tx
-        .send(StatusMessage::TaskFinished {
-            name: task_name.to_string(),
-            result: result.clone(),
-        })
+        .send((
+            task_id,
+            TaskStatus::Finished {
+                result: result.clone(),
+            },
+        ))
         .await
         .into_diagnostic()?;
 
     Ok(result.map_err(|e| crate::Error::TaskFailed {
-        task_name: task_name.to_string(),
+        // TODO: task_name
+        task_name: task_id.to_string(),
         task_error: e,
     })?)
 }
@@ -218,7 +226,7 @@ async fn run_task(
 /// Executes the commands for a single task.
 async fn run_cmds(
     ctx: &LocalContext,
-    task_name: &str,
+    task_id: usize,
     task: &NurTask,
     cancellation: &tokio_util::sync::CancellationToken,
 ) -> Result<TaskResult, TaskError> {
@@ -243,18 +251,12 @@ async fn run_cmds(
             spawn_reader(
                 child.inner().stdout.take().expect("no stdout handle"),
                 ctx.tx.clone(),
-                |line| StatusMessage::StdOut {
-                    task_name: task_name.to_string(),
-                    line
-                },
+                |line| (task_id, TaskStatus::StdOut { line }),
             ),
             spawn_reader(
                 child.inner().stderr.take().expect("no stderr handle"),
                 ctx.tx.clone(),
-                |line| StatusMessage::StdErr {
-                    task_name: task_name.to_string(),
-                    line
-                },
+                |line| (task_id, TaskStatus::StdErr { line }),
             ),
             async move {
                 tokio::select! {

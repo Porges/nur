@@ -42,6 +42,7 @@ pub enum OutputStyle {
         separator: String,
         separator_start: Option<String>,
         separator_end: Option<String>,
+        deterministic: bool,
     },
     Streamed {
         separator: String,

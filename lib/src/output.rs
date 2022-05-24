@@ -16,13 +16,15 @@ pub trait Output<T>: Send + Sync {
     async fn handle(&mut self, msg: T);
 }
 
-pub fn from_config<'a>(
+pub fn create<'a>(
     stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
     stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
-    config: &NurFile,
-    task_name_length_hint: Option<usize>,
+    options: &OutputOptions,
+    execution_order: &[&str],
 ) -> Box<dyn Output<crate::StatusMessage> + 'a> {
-    let prefixer: Box<dyn Prefixer + Send + Sync> = match config.options.output.prefix {
+    let task_name_length_hint = execution_order.iter().map(|x| x.len()).max();
+
+    let prefixer: Box<dyn Prefixer + Send + Sync> = match options.prefix {
         PrefixStyle::NoPrefix => Box::new(NullPrefixer {}),
         PrefixStyle::Always => Box::new(AlwaysPrefixer {}),
         PrefixStyle::Aligned => {
@@ -32,21 +34,25 @@ pub fn from_config<'a>(
     };
 
     let output = sink::Sink { stdout, stderr };
-    match &config.options.output.style {
+    let streamed = |sep: &str| Streamed {
+        output,
+        separator: sep.to_string(),
+        prefixer,
+        names: execution_order.iter().map(|x| x.to_string()).collect(),
+    };
+
+    match &options.style {
         OutputStyle::Grouped {
             separator,
             separator_start,
             separator_end,
-        } => Box::new(Grouped::new(Streamed {
-            output,
-            separator: separator.clone(),
-            prefixer,
-        })),
-        OutputStyle::Streamed { separator } => Box::new(Streamed {
-            output,
-            separator: separator.clone(),
-            prefixer,
-        }),
+            deterministic,
+        } => Box::new(Grouped::new(
+            streamed(separator),
+            execution_order.len(),
+            *deterministic,
+        )),
+        OutputStyle::Streamed { separator } => Box::new(streamed(separator)),
     }
 }
 

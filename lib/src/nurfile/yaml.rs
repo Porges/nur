@@ -46,6 +46,8 @@ pub enum OutputStyle {
         separator: Option<String>,
         separator_start: Option<String>,
         separator_end: Option<String>,
+        #[serde(default)]
+        deterministic: bool,
     },
     Streamed {
         separator: Option<String>,
@@ -66,6 +68,7 @@ impl From<OutputStyleAliases> for OutputStyle {
                 separator: None,
                 separator_start: None,
                 separator_end: None,
+                deterministic: false,
             },
         }
     }
@@ -175,10 +178,12 @@ impl From<OutputStyle> for crate::nurfile::OutputStyle {
                 separator,
                 separator_end,
                 separator_start,
+                deterministic,
             } => crate::nurfile::OutputStyle::Grouped {
                 separator: separator.unwrap_or_else(|| "│".to_string()),
                 separator_end,
                 separator_start,
+                deterministic,
             },
             OutputStyle::Streamed { separator } => crate::nurfile::OutputStyle::Streamed {
                 separator: separator.unwrap_or_else(|| "│".to_string()),

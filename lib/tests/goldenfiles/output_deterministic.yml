@@ -1,0 +1,15 @@
+version: 1.0
+
+default:
+  after: [t1, t2, t3, t4, t5]
+
+t5:
+  run: sleep 1
+t4:
+  run: sleep 4
+t3:
+  run: sleep 3
+t2:
+  run: sleep 2
+t1:
+  run: sleep 1

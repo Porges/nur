@@ -8,7 +8,7 @@ use goldenfile::Mint;
 use miette::IntoDiagnostic;
 use tokio::io::AsyncWrite;
 
-use nur_lib::commands::Command;
+use nur_lib::{commands::Command, nurfile::OutputOptions};
 
 #[tokio::test]
 async fn run_golden_tests() -> miette::Result<()> {
@@ -71,6 +71,15 @@ fn run_config<'a>(
         dry_run: false,
         nur_file: Some(nurfile_path.to_owned()),
         task_names: Default::default(),
+        output_override: Some(OutputOptions {
+            prefix: nur_lib::nurfile::PrefixStyle::Aligned,
+            style: nur_lib::nurfile::OutputStyle::Grouped {
+                separator: ": ".to_string(),
+                separator_start: None,
+                separator_end: None,
+                deterministic: true,
+            },
+        }),
     };
 
     async move { task_command.run(ctx).await }
