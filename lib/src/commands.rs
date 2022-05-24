@@ -7,12 +7,12 @@ pub use check::Check;
 pub use init::Init;
 pub use list::List;
 pub use task::Task;
-use tokio::sync::mpsc;
+use tokio::io::AsyncWrite;
 
-#[derive(Clone)]
-pub struct Context {
+pub struct Context<'a> {
     pub cwd: std::path::PathBuf,
-    pub output: mpsc::Sender<Message>,
+    pub stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
+    pub stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
 }
 
 #[derive(Debug)]
@@ -23,5 +23,5 @@ pub enum Message {
 
 #[async_trait::async_trait]
 pub trait Command {
-    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()>;
+    async fn run<'a>(&self, ctx: crate::commands::Context<'a>) -> miette::Result<()>;
 }

@@ -23,7 +23,7 @@ const DEFAULT_TASK_NAME: &str = "default";
 
 #[async_trait::async_trait]
 impl crate::commands::Command for Task {
-    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         let graph = {
@@ -46,9 +46,9 @@ impl crate::commands::Command for Task {
         let execution_order = get_execution_order(graph, &self.task_names);
 
         let longest_name = execution_order.iter().map(|x| x.len()).max();
-        let output = crate::output::from_config(&config, longest_name);
+        let mut output = crate::output::from_config(ctx.stdout, ctx.stderr, &config, longest_name);
 
-        let (tx, rx) = mpsc::channel::<crate::StatusMessage>(100);
+        let (tx, mut rx) = mpsc::channel::<crate::StatusMessage>(100);
         let local_ctx = LocalContext {
             cwd: ctx.cwd.clone(),
             tx,
@@ -56,7 +56,11 @@ impl crate::commands::Command for Task {
 
         let (task_results, ()) = tokio::join!(
             run_tasks(local_ctx, execution_order, &config.tasks),
-            output.handle(&ctx, rx),
+            async move {
+                while let Some(msg) = rx.recv().await {
+                    output.handle(msg).await;
+                }
+            }
         );
 
         // TODO: report all errors?

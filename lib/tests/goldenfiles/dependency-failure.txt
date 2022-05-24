@@ -1,9 +1,9 @@
 --- stdout ---
-      c ┼ — Started task ‘c’
+      c │ — Started task ‘c’
         │ — Task ‘c’ failed: external command failed (exit status: 100) when executing: `exit 100`
-      b ┼ — Task ‘b’ skipped
-      a ┼ — Task ‘a’ skipped
-default ┼ — Task ‘default’ skipped
+      b │ — Task ‘b’ skipped
+      a │ — Task ‘a’ skipped
+default │ — Task ‘default’ skipped
 --- stderr ---
 --- error ---
 nur::task_failed

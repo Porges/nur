@@ -1,7 +1,6 @@
 use miette::IntoDiagnostic;
 use nu_table::StyledString;
-
-use super::Message;
+use tokio::io::AsyncWriteExt;
 
 pub struct List {
     pub nur_file: Option<std::path::PathBuf>,
@@ -9,7 +8,7 @@ pub struct List {
 
 #[async_trait::async_trait]
 impl crate::commands::Command for List {
-    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         let (_, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         let taskdata: Vec<Vec<StyledString>> = config
@@ -36,8 +35,8 @@ impl crate::commands::Command for List {
         let color_hm = Default::default();
         let table = nu_table::draw_table(&table, 80, &color_hm, &config);
 
-        ctx.output
-            .send(Message::Out(table))
+        ctx.stdout
+            .write_all(table.as_bytes())
             .await
             .into_diagnostic()?;
 

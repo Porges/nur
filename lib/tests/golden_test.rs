@@ -6,9 +6,9 @@ use std::{
 
 use goldenfile::Mint;
 use miette::IntoDiagnostic;
-use tokio::sync::mpsc::{self, Sender};
+use tokio::io::AsyncWrite;
 
-use nur_lib::{commands::Command, commands::Message};
+use nur_lib::commands::Command;
 
 #[tokio::test]
 async fn run_golden_tests() -> miette::Result<()> {
@@ -36,21 +36,10 @@ async fn run_golden_tests() -> miette::Result<()> {
             continue;
         }
 
-        let (tx, mut rx) = mpsc::channel(10);
+        let mut output_buf = Vec::new();
+        let mut error_buf = Vec::new();
 
-        let (result, (stdout, stderr)) =
-            tokio::join!(run_config(&parent_dir, &path, tx), async move {
-                let mut stdout = Vec::new();
-                let mut stderr = Vec::new();
-                while let Some(line) = rx.recv().await {
-                    match line {
-                        Message::Out(line) => stdout.push(line),
-                        Message::Err(line) => stderr.push(line),
-                    }
-                }
-
-                (stdout, stderr)
-            });
+        let result = run_config(&parent_dir, &path, &mut output_buf, &mut error_buf).await;
 
         let golden_path = {
             // https://www.youtube.com/watch?v=jTqwe57ObFo
@@ -60,20 +49,22 @@ async fn run_golden_tests() -> miette::Result<()> {
         };
 
         let golden = mint.new_goldenfile(&golden_path).into_diagnostic()?;
-        write_outputs(golden, stdout, stderr, result).into_diagnostic()?;
+        write_outputs(golden, &output_buf, &error_buf, result).into_diagnostic()?;
     }
 
     Ok(())
 }
 
-async fn run_config(
+fn run_config<'a>(
     parent_dir: &Path,
     nurfile_path: &Path,
-    output: Sender<nur_lib::commands::Message>,
-) -> miette::Result<()> {
+    stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
+    stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
+) -> impl std::future::Future<Output = miette::Result<()>> + 'a {
     let ctx = nur_lib::commands::Context {
         cwd: parent_dir.to_owned(),
-        output,
+        stdout,
+        stderr,
     };
 
     let task_command = nur_lib::commands::Task {
@@ -82,27 +73,20 @@ async fn run_config(
         task_names: Default::default(),
     };
 
-    let result = task_command.run(ctx).await?;
-    Ok(result)
+    async move { task_command.run(ctx).await }
 }
 
 fn write_outputs(
     mut golden: std::fs::File,
-    stdout: Vec<String>,
-    stderr: Vec<String>,
+    stdout: &[u8],
+    stderr: &[u8],
     result: miette::Result<()>,
 ) -> std::io::Result<()> {
     golden.write_all(b"--- stdout ---\n")?;
-    for line in stdout {
-        golden.write_all(line.as_bytes())?;
-        golden.write_all(b"\n")?;
-    }
+    golden.write_all(stdout)?;
 
     golden.write_all(b"--- stderr ---\n")?;
-    for line in stderr {
-        golden.write_all(line.as_bytes())?;
-        golden.write_all(b"\n")?;
-    }
+    golden.write_all(stderr)?;
 
     if let Err(e) = result {
         let str = format!("{:?}", e);

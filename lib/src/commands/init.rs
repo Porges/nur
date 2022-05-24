@@ -4,8 +4,6 @@ use miette::IntoDiagnostic;
 use question::{Answer, Question};
 use tokio::io::AsyncWriteExt;
 
-use crate::commands::Message;
-
 pub struct Init {
     pub nur_file: Option<std::path::PathBuf>,
     pub dry_run: bool,
@@ -33,7 +31,7 @@ more:
 
 #[async_trait::async_trait]
 impl crate::commands::Command for Init {
-    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         // ensure that we aren’t going to overwrite anything:
         if let Some(nur_file) = &self.nur_file {
             if nur_file.exists() {
@@ -64,10 +62,11 @@ impl crate::commands::Command for Init {
             if path.exists() {
                 return Err(crate::Error::NurfileAlreadyExists { path }.into());
             } else {
-                ctx.output
-                    .send(Message::Out(format!(
-                        "[dryrun] Would create file {path:#?} with sample content."
-                    )))
+                ctx.stdout
+                    .write_all(
+                        format!("[dryrun] Would create file {path:#?} with sample content.")
+                            .as_bytes(),
+                    )
                     .await
                     .into_diagnostic()?;
             }
@@ -91,8 +90,8 @@ impl crate::commands::Command for Init {
                     .into_diagnostic()?;
             }
 
-            ctx.output
-                .send(Message::Out(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.")))
+            ctx.stdout
+                .write_all(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.").as_bytes())
                 .await
                 .into_diagnostic()?;
         }

@@ -25,15 +25,55 @@ pub struct Options {
     output: Option<OutputOptions>,
 }
 
+#[serde_with::serde_as]
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct OutputOptions {
     #[serde(default)]
     prefix: Option<Prefix>,
+
+    #[serde(default)]
+    #[serde_as(
+        deserialize_as = "Option<serde_with::PickFirst<(_, serde_with::FromInto<OutputStyleAliases>)>>"
+    )]
+    style: Option<OutputStyle>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "style")]
+pub enum OutputStyle {
+    Grouped {
+        separator: Option<String>,
+        separator_start: Option<String>,
+        separator_end: Option<String>,
+    },
+    Streamed {
+        separator: Option<String>,
+    },
+}
+
+#[derive(Deserialize)]
+pub enum OutputStyleAliases {
+    Streamed,
+    Grouped,
+}
+
+impl From<OutputStyleAliases> for OutputStyle {
+    fn from(osa: OutputStyleAliases) -> Self {
+        match osa {
+            OutputStyleAliases::Streamed => OutputStyle::Streamed { separator: None },
+            OutputStyleAliases::Grouped => OutputStyle::Grouped {
+                separator: None,
+                separator_start: None,
+                separator_end: None,
+            },
+        }
+    }
 }
 
 #[derive(Deserialize)]
 enum Prefix {
+    None,
     Always,
     Aligned,
 }
@@ -122,7 +162,27 @@ impl From<Options> for crate::nurfile::Options {
 impl From<OutputOptions> for crate::nurfile::OutputOptions {
     fn from(o: OutputOptions) -> Self {
         crate::nurfile::OutputOptions {
+            style: o.style.map(Into::into).unwrap_or_default(),
             prefix: o.prefix.map(Into::into).unwrap_or_default(),
+        }
+    }
+}
+
+impl From<OutputStyle> for crate::nurfile::OutputStyle {
+    fn from(o: OutputStyle) -> Self {
+        match o {
+            OutputStyle::Grouped {
+                separator,
+                separator_end,
+                separator_start,
+            } => crate::nurfile::OutputStyle::Grouped {
+                separator: separator.unwrap_or_else(|| "│".to_string()),
+                separator_end,
+                separator_start,
+            },
+            OutputStyle::Streamed { separator } => crate::nurfile::OutputStyle::Streamed {
+                separator: separator.unwrap_or_else(|| "│".to_string()),
+            },
         }
     }
 }
@@ -130,6 +190,7 @@ impl From<OutputOptions> for crate::nurfile::OutputOptions {
 impl From<Prefix> for crate::nurfile::PrefixStyle {
     fn from(p: Prefix) -> Self {
         match p {
+            Prefix::None => crate::nurfile::PrefixStyle::NoPrefix,
             Prefix::Always => crate::nurfile::PrefixStyle::Always,
             Prefix::Aligned => crate::nurfile::PrefixStyle::Aligned,
         }

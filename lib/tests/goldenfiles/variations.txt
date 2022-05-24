@@ -1,11 +1,11 @@
 --- stdout ---
-    runSh ┼ — Started task ‘runSh’
-runString ┼ — Started task ‘runString’
-    runSh ┼ run sh
+    runSh │ — Started task ‘runSh’
+runString │ — Started task ‘runString’
+    runSh │ run sh
           │ — Task ‘runSh’ completed
-runString ┼ simple run
+runString │ simple run
           │ — Task ‘runString’ completed
-  default ┼ — Started task ‘default’
+  default │ — Started task ‘default’
           │ plain cmd
           │ alternate cmd
           │ — Task ‘default’ completed

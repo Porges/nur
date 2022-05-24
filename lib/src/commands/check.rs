@@ -1,15 +1,13 @@
 use miette::IntoDiagnostic;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::commands::Message;
-
 pub struct Check {
     pub nur_file: Option<std::path::PathBuf>,
 }
 
 #[async_trait::async_trait]
 impl crate::commands::Command for Check {
-    async fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
+    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
         let mut err_count = 0;
@@ -23,15 +21,15 @@ impl crate::commands::Command for Check {
                         cmd.sh
                     );
 
-                    ctx.output
-                        .send(Message::Out(message))
+                    ctx.stdout
+                        .write_all(message.as_bytes())
                         .await
                         .into_diagnostic()?;
 
                     for line in errors {
                         let line = "\t".to_owned() + &line;
-                        ctx.output
-                            .send(Message::Out(line))
+                        ctx.stdout
+                            .write_all(line.as_bytes())
                             .await
                             .into_diagnostic()?
                     }
@@ -40,17 +38,13 @@ impl crate::commands::Command for Check {
         }
 
         if err_count == 0 {
-            ctx.output
-                .send(Message::Out(format!(
-                    "No syntax errors found in: {path:#?}"
-                )))
+            ctx.stdout
+                .write_all(format!("No syntax errors found in: {path:#?}").as_bytes())
                 .await
                 .into_diagnostic()?;
         } else {
-            ctx.output
-                .send(Message::Out(format!(
-                    "{err_count} syntax errors found in: {path:#?}"
-                )))
+            ctx.stdout
+                .write_all(format!("{err_count} syntax errors found in: {path:#?}").as_bytes())
                 .await
                 .into_diagnostic()?;
         }

@@ -1,56 +1,48 @@
 use crate::{commands::Message, StatusMessage, TaskResult};
 
-pub struct Streamed {
-    pub prefixer: Box<dyn Fn() -> Box<dyn crate::output::Prefixer + Send> + Sync + Send>,
+pub struct Streamed<O> {
+    pub output: O,
+    pub separator: String,
+    pub prefixer: Box<dyn crate::output::Prefixer + Send + Sync>,
 }
 
 #[async_trait::async_trait]
-impl crate::output::Output for Streamed {
-    async fn handle(
-        &self,
-        ctx: &crate::commands::Context,
-        mut rx: tokio::sync::mpsc::Receiver<crate::StatusMessage>,
-    ) {
-        let mut prefixer = (self.prefixer)();
-        while let Some(msg) = rx.recv().await {
-            match msg {
-                StatusMessage::StdOut { task_name, line } => {
-                    let line = prefixer.prefix(&task_name, line);
-                    if ctx.output.send(Message::Out(line)).await.is_err() {
-                        break;
-                    }
-                }
-                StatusMessage::StdErr { task_name, line } => {
-                    let line = prefixer.prefix(&task_name, line);
-                    if ctx.output.send(Message::Err(line)).await.is_err() {
-                        break;
-                    }
-                }
-                StatusMessage::TaskStarted { name } => {
-                    let msg = format!("— Started task ‘{name}’");
-                    let msg = prefixer.prefix(&name, msg);
-                    if ctx.output.send(Message::Out(msg)).await.is_err() {
-                        break;
-                    }
-                }
-                StatusMessage::TaskFinished { name, result } => {
-                    let msg = match result {
-                        Ok(TaskResult::Skipped) => format!("— Task ‘{name}’ skipped"),
-                        Ok(TaskResult::RanToCompletion) => {
-                            format!("— Task ‘{name}’ completed")
-                        }
-                        Ok(TaskResult::Cancelled) => {
-                            format!("— Task ‘{name}’ cancelled")
-                        }
-                        Err(r) => format!("— Task ‘{name}’ failed: {r}"),
-                    };
-
-                    let msg = prefixer.prefix(&name, msg);
-                    if ctx.output.send(Message::Out(msg)).await.is_err() {
-                        break;
-                    }
-                }
+impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for Streamed<O> {
+    async fn handle(&mut self, msg: crate::StatusMessage) {
+        let to_send = match msg {
+            StatusMessage::StdOut { task_name, line } => {
+                let prefix = self.prefixer.prefix(&task_name);
+                let line = format!("{prefix} {} {line}", self.separator);
+                Message::Out(line)
             }
-        }
+            StatusMessage::StdErr { task_name, line } => {
+                let prefix = self.prefixer.prefix(&task_name);
+                let line = format!("{prefix} {} {line}", self.separator);
+                Message::Err(line)
+            }
+            StatusMessage::TaskStarted { name } => {
+                let prefix = self.prefixer.prefix(&name);
+                let line = format!("{prefix} {} — Started task ‘{name}’", self.separator);
+                Message::Out(line)
+            }
+            StatusMessage::TaskFinished { name, result } => {
+                let msg = match result {
+                    Ok(TaskResult::Skipped) => format!("— Task ‘{name}’ skipped"),
+                    Ok(TaskResult::RanToCompletion) => {
+                        format!("— Task ‘{name}’ completed")
+                    }
+                    Ok(TaskResult::Cancelled) => {
+                        format!("— Task ‘{name}’ cancelled")
+                    }
+                    Err(r) => format!("— Task ‘{name}’ failed: {r}"),
+                };
+
+                let prefix = self.prefixer.prefix(&name);
+                let line = format!("{prefix} {} {msg}", self.separator);
+                Message::Out(line)
+            }
+        };
+
+        self.output.handle(to_send).await;
     }
 }

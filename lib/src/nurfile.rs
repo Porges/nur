@@ -31,7 +31,29 @@ pub struct Options {
 
 #[derive(Debug, Default)]
 pub struct OutputOptions {
+    pub style: OutputStyle,
     pub prefix: PrefixStyle,
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum OutputStyle {
+    Grouped {
+        separator: String,
+        separator_start: Option<String>,
+        separator_end: Option<String>,
+    },
+    Streamed {
+        separator: String,
+    },
+}
+
+impl Default for OutputStyle {
+    fn default() -> Self {
+        OutputStyle::Streamed {
+            separator: "│".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -133,6 +155,7 @@ pub fn read_nurfile(
     let contents = std::fs::read_to_string(&file.0).into_diagnostic()?;
     let parsed = (file.1)(&file.0, &contents)?;
     /* TODO: this hides the inner diagnostics
+        see: https://github.com/zkat/miette/issues/172
         .map_err(|inner| Error::NurfileSyntaxError {
             path: file.0.clone(),
             inner,

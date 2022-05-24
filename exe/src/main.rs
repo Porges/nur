@@ -1,7 +1,6 @@
 use clap::Parser;
 use miette::IntoDiagnostic;
 use std::{collections::BTreeSet, path::PathBuf};
-use tokio::{io::AsyncWriteExt, sync::mpsc};
 
 use nur_lib::commands;
 
@@ -67,32 +66,13 @@ async fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let command = build_command(cli);
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<nur_lib::commands::Message>(1000);
-    let ctx = nur_lib::commands::Context { cwd, output: tx };
+    let ctx = nur_lib::commands::Context {
+        cwd,
+        stdout: &mut tokio::io::stdout(),
+        stderr: &mut tokio::io::stderr(),
+    };
 
-    let (result, ()) = tokio::join!(command.run(ctx), handle_output(rx));
-    result
-}
-
-async fn handle_output(mut rx: mpsc::Receiver<nur_lib::commands::Message>) {
-    let mut stdout = tokio::io::stdout();
-    let mut stderr = tokio::io::stderr();
-    while let Some(message) = rx.recv().await {
-        match message {
-            nur_lib::commands::Message::Out(mut s) => {
-                s.push('\n');
-                if stdout.write_all(s.as_bytes()).await.is_err() {
-                    break;
-                }
-            }
-            nur_lib::commands::Message::Err(mut s) => {
-                s.push('\n');
-                if stderr.write_all(s.as_bytes()).await.is_err() {
-                    break;
-                }
-            }
-        }
-    }
+    command.run(ctx).await
 }
 
 #[cfg(feature = "nu")]
