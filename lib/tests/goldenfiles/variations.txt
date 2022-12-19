@@ -1,12 +1,11 @@
---- stdout ---
-    runSh: — Started task ‘runSh’
-         : run sh
-         : — Task ‘runSh’ completed
-runString: — Started task ‘runString’
-         : simple run
-         : — Task ‘runString’ completed
-  default: — Started task ‘default’
-         : plain cmd
-         : alternate cmd
-         : — Task ‘default’ completed
---- stderr ---
+stdout: |2
+      runSh╭╴ Started task ‘runSh’
+           │run sh
+           ╰╴ Task ‘runSh’ completed
+  runString╭╴ Started task ‘runString’
+           │simple run
+           ╰╴ Task ‘runString’ completed
+    default╭╴ Started task ‘default’
+           │plain cmd
+           │alternate cmd
+           ╰╴ Task ‘default’ completed

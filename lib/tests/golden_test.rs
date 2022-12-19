@@ -5,13 +5,13 @@ use std::{
 };
 
 use goldenfile::Mint;
-use miette::IntoDiagnostic;
+use miette::{IntoDiagnostic, Result};
 use tokio::io::AsyncWrite;
 
 use nur_lib::{commands::Command, nurfile::OutputOptions};
 
 #[tokio::test]
-async fn run_golden_tests() -> miette::Result<()> {
+async fn run_golden_tests() -> Result<()> {
     // override default hook,  since we need the output
     // to be consistent regardless of where it is running
     miette::set_hook(Box::new(|_diag| {
@@ -49,7 +49,7 @@ async fn run_golden_tests() -> miette::Result<()> {
         };
 
         let golden = mint.new_goldenfile(&golden_path).into_diagnostic()?;
-        write_outputs(golden, &output_buf, &error_buf, result).into_diagnostic()?;
+        write_outputs(golden, &output_buf, &error_buf, result)?;
     }
 
     Ok(())
@@ -74,9 +74,9 @@ fn run_config<'a>(
         output_override: Some(OutputOptions {
             prefix: nur_lib::nurfile::PrefixStyle::Aligned,
             style: nur_lib::nurfile::OutputStyle::Grouped {
-                separator: ": ".to_string(),
-                separator_start: None,
-                separator_end: None,
+                separator: "│".to_string(),
+                separator_first: Some("╭".to_string()),
+                separator_last: Some("╰".to_string()),
                 deterministic: true,
             },
         }),
@@ -89,23 +89,37 @@ fn write_outputs(
     mut golden: std::fs::File,
     stdout: &[u8],
     stderr: &[u8],
-    result: miette::Result<()>,
-) -> std::io::Result<()> {
-    golden.write_all(b"--- stdout ---\n")?;
-    golden.write_all(stdout)?;
+    result: Result<()>,
+) -> Result<()> {
+    let error = match result {
+        Err(e) => Some(format!("{:?}", e)),
+        Ok(()) => None,
+    };
 
-    golden.write_all(b"--- stderr ---\n")?;
-    golden.write_all(stderr)?;
+    let output = &Golden {
+        stdout: from_str(stdout),
+        stderr: from_str(stderr),
+        error,
+    };
 
-    if let Err(e) = result {
-        let str = format!("{:?}", e);
+    serde_yaml::to_writer(&golden, output).into_diagnostic()?;
 
-        golden.write_all(b"--- error ---\n")?;
-        golden.write_all(str.as_bytes())?;
-        golden.write_all(b"\n")?;
-    }
-
-    golden.flush()?;
+    golden.flush().into_diagnostic()?;
 
     Ok(())
+}
+
+fn from_str(x: &[u8]) -> Option<String> {
+    match String::from_utf8_lossy(x) {
+        x if x.is_empty() => None,
+        x => Some(x.to_string()),
+    }
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(serde::Serialize)]
+struct Golden {
+    stdout: Option<String>,
+    stderr: Option<String>,
+    error: Option<String>,
 }

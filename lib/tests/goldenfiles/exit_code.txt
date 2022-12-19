@@ -1,5 +1,4 @@
---- stdout ---
-default: — Started task ‘default’
-       : ignored result!
-       : — Task ‘default’ completed
---- stderr ---
+stdout: |
+  default╭╴ Started task ‘default’
+         │ignored result!
+         ╰╴ Task ‘default’ completed

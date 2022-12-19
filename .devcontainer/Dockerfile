@@ -1,7 +1,4 @@
-# See here for image contents: https://github.com/microsoft/vscode-dev-containers/tree/v0.233.0/containers/rust/.devcontainer/base.Dockerfile
-
-# [Choice] Debian OS version (use bullseye on local arm64/Apple Silicon): buster, bullseye
-ARG VARIANT="buster"
+ARG VARIANT="bullseye"
 FROM mcr.microsoft.com/vscode/devcontainers/rust:0-${VARIANT}
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -9,5 +6,5 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     jq
 
 USER vscode
-RUN rustup target add x86_64-unknown-linux-musl
-RUN cargo install cargo-edit cargo-audit cargo-workspaces git-cliff
+RUN rustup target add x86_64-unknown-linux-musl && rustup default stable
+RUN cargo install cargo-edit cargo-deny cargo-workspaces git-cliff

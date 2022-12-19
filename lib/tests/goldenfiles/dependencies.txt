@@ -1,10 +1,9 @@
---- stdout ---
-  hello: — Started task ‘hello’
-       : hello!
-       : — Task ‘hello’ completed
-  world: — Started task ‘world’
-       : world
-       : — Task ‘world’ completed
-default: — Started task ‘default’
-       : — Task ‘default’ completed
---- stderr ---
+stdout: |2
+    hello╭╴ Started task ‘hello’
+         │hello!
+         ╰╴ Task ‘hello’ completed
+    world╭╴ Started task ‘world’
+         │world
+         ╰╴ Task ‘world’ completed
+  default╭╴ Started task ‘default’
+         ╰╴ Task ‘default’ completed

@@ -39,12 +39,12 @@ impl crate::commands::Command for Check {
 
         if err_count == 0 {
             ctx.stdout
-                .write_all(format!("No syntax errors found in: {path:#?}").as_bytes())
+                .write_all(format!("No syntax errors found in: {path:#?}\n").as_bytes())
                 .await
                 .into_diagnostic()?;
         } else {
             ctx.stdout
-                .write_all(format!("{err_count} syntax errors found in: {path:#?}").as_bytes())
+                .write_all(format!("{err_count} syntax errors found in: {path:#?}\n").as_bytes())
                 .await
                 .into_diagnostic()?;
         }

@@ -1,7 +1,4 @@
---- stdout ---
---- stderr ---
---- error ---
-nur::task_cycle
+error: |
+  nur::task_cycle
 
-  × Nur file "tests/goldenfiles/self-cycle.yml" has a task cycle involving task ‘default’
-
+    × Nur file "tests/goldenfiles/self-cycle.yml" has a task cycle involving task ‘default’

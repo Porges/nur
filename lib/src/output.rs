@@ -34,25 +34,47 @@ pub fn create<'a>(
     };
 
     let output = sink::Sink { stdout, stderr };
-    let streamed = |sep: &str| Streamed {
-        output,
-        separator: sep.to_string(),
-        prefixer,
-        names: execution_order.iter().map(|x| x.to_string()).collect(),
-    };
+    let streamed =
+        |separator: &str, separator_first: &str, separator_switch: &str, separator_last: &str| {
+            Streamed::new(
+                output,
+                separator.to_string(),
+                separator_first.to_string(),
+                separator_switch.to_string(),
+                separator_last.to_string(),
+                execution_order
+                    .iter()
+                    .map(|name| name.to_string())
+                    .collect(),
+                prefixer,
+            )
+        };
 
     match &options.style {
         OutputStyle::Grouped {
             separator,
-            separator_start,
-            separator_end,
             deterministic,
+            separator_first,
+            separator_last,
         } => Box::new(Grouped::new(
-            streamed(separator),
+            streamed(
+                separator,
+                separator_first.as_ref().unwrap_or(separator),
+                separator,
+                separator_last.as_ref().unwrap_or(separator),
+            ),
             execution_order.len(),
             *deterministic,
         )),
-        OutputStyle::Streamed { separator } => Box::new(streamed(separator)),
+        OutputStyle::Streamed {
+            separator,
+            separator_switch,
+        } => Box::new(streamed(
+            separator,
+            separator,
+            separator_switch.as_ref().unwrap_or(separator),
+            separator,
+        )),
     }
 }
 
@@ -114,10 +136,9 @@ impl Prefixer for AlignedPrefixer {
     }
 }
 
-const EMPTY_STR: &str = "";
 struct NullPrefixer {}
 impl Prefixer for NullPrefixer {
     fn prefix<'a: 's, 's>(&'s mut self, _task_name: &'a str) -> &'s str {
-        EMPTY_STR
+        ""
     }
 }

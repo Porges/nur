@@ -40,12 +40,13 @@ pub struct OutputOptions {
 pub enum OutputStyle {
     Grouped {
         separator: String,
-        separator_start: Option<String>,
-        separator_end: Option<String>,
+        separator_first: Option<String>,
+        separator_last: Option<String>,
         deterministic: bool,
     },
     Streamed {
         separator: String,
+        separator_switch: Option<String>,
     },
 }
 
@@ -53,6 +54,7 @@ impl Default for OutputStyle {
     fn default() -> Self {
         OutputStyle::Streamed {
             separator: "│".to_string(),
+            separator_switch: Some("┼".to_string()),
         }
     }
 }

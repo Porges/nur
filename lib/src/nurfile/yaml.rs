@@ -40,7 +40,7 @@ pub struct OutputOptions {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "style")]
+#[serde(rename_all = "snake_case")]
 pub enum OutputStyle {
     Grouped {
         separator: Option<String>,
@@ -51,10 +51,12 @@ pub enum OutputStyle {
     },
     Streamed {
         separator: Option<String>,
+        separator_switch: Option<String>,
     },
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum OutputStyleAliases {
     Streamed,
     Grouped,
@@ -63,7 +65,10 @@ pub enum OutputStyleAliases {
 impl From<OutputStyleAliases> for OutputStyle {
     fn from(osa: OutputStyleAliases) -> Self {
         match osa {
-            OutputStyleAliases::Streamed => OutputStyle::Streamed { separator: None },
+            OutputStyleAliases::Streamed => OutputStyle::Streamed {
+                separator: None,
+                separator_switch: None,
+            },
             OutputStyleAliases::Grouped => OutputStyle::Grouped {
                 separator: None,
                 separator_start: None,
@@ -181,12 +186,16 @@ impl From<OutputStyle> for crate::nurfile::OutputStyle {
                 deterministic,
             } => crate::nurfile::OutputStyle::Grouped {
                 separator: separator.unwrap_or_else(|| "│".to_string()),
-                separator_end,
-                separator_start,
+                separator_first: Some(separator_start.unwrap_or_else(|| "╭".to_string())),
+                separator_last: Some(separator_end.unwrap_or_else(|| "╰".to_string())),
                 deterministic,
             },
-            OutputStyle::Streamed { separator } => crate::nurfile::OutputStyle::Streamed {
+            OutputStyle::Streamed {
+                separator,
+                separator_switch,
+            } => crate::nurfile::OutputStyle::Streamed {
                 separator: separator.unwrap_or_else(|| "│".to_string()),
+                separator_switch: Some(separator_switch.unwrap_or_else(|| "┼".to_string())),
             },
         }
     }

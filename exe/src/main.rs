@@ -2,7 +2,10 @@ use clap::Parser;
 use miette::IntoDiagnostic;
 use std::{collections::BTreeSet, path::PathBuf};
 
-use nur_lib::commands;
+use nur_lib::{
+    commands,
+    nurfile::{OutputOptions, OutputStyle, PrefixStyle},
+};
 
 /// A robust task runner.
 #[derive(clap::Parser)]
@@ -13,15 +16,15 @@ struct Cli {
     task_names: Vec<String>,
 
     /// Create a fresh Nurfile.
-    #[clap(long, conflicts_with_all = &["list", "check", "task-names"])]
+    #[clap(long, conflicts_with_all = &["list", "check", "task_names"])]
     init: bool,
 
     /// List all the tasks available in the Nurfile.
-    #[clap(long, short, conflicts_with_all = &["init", "task-names", "check", "dry-run"])]
+    #[clap(long, short, conflicts_with_all = &["init", "task_names", "check", "dry_run"])]
     list: bool,
 
     /// Syntax check the Nurfile and its shell commands.
-    #[clap(long, conflicts_with_all = &["init", "task-names", "list", "dry-run"])]
+    #[clap(long, conflicts_with_all = &["init", "task_names", "list", "dry_run"])]
     check: bool,
 
     /// Should what would be executed but don’t actually run the commands.
@@ -53,11 +56,25 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
         todo!("dry-run not yet supported");
     }
 
+    let output_override = if std::env::var_os("GITHUB_ACTIONS") == Some("true".into()) {
+        Some(OutputOptions {
+            prefix: PrefixStyle::NoPrefix,
+            style: OutputStyle::Grouped {
+                separator: String::new(),
+                separator_first: Some("::group::".to_string()),
+                separator_last: Some("::endgroup::".to_string()),
+                deterministic: true,
+            },
+        })
+    } else {
+        None
+    };
+
     Box::new(commands::Task {
         dry_run: cli.dry_run,
         nur_file: cli.file,
         task_names: BTreeSet::from_iter(cli.task_names),
-        output_override: None,
+        output_override,
     })
 }
 
