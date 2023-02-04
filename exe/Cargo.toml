@@ -16,7 +16,7 @@ nu-engine = { version = "0.68", optional = true }
 nu-parser = { version = "0.68", optional = true }
 nur-lib = { path="../lib" }
 serde_yaml = "0.9"
-tokio = { version = "1.23.1", features = ["rt", "macros"] }
+tokio = { version = "1.24.2", features = ["rt", "macros"] }
 
 [features]
 default = []
