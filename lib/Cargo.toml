@@ -21,7 +21,7 @@ miette = { version = "5.5", features = [] }
 nu-ansi-term = "0.47"
 nu-engine = { version = "0.82", optional = true } 
 nu-parser = { version = "0.82", optional = true }
-nu-protocol = "0.82"
+nu-protocol = { version = "0.82", optional = true }
 nu-table = "0.82"
 petgraph = { version = "0.6.2", features = ["graphmap"] }
 question = "0.2.2"

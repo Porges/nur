@@ -21,8 +21,8 @@ jobs:
           components: clippy, rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - run: .devcontainer/install.sh
-      - run: cargo llvm-cov nextest --all-targets --locked --workspace --lcov
-      - run: cargo build --release --locked
+      - run: cargo llvm-cov nextest --all-targets --locked --workspace --lcov --output-path coverage.info --target x86_64-unknown-linux-musl
+      - run: cargo build --release --locked --target x86_64-unknown-linux-musl
       - uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
