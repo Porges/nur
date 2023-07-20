@@ -24,7 +24,7 @@ pub enum Error {
     )]
     NurfileNotFound { directory: PathBuf },
 
-    #[error("Nur file already exists at destination: {path:#?}")]
+    #[error("Nur file already exists at destination: {path:?}")]
     #[diagnostic(code(nur::nur_file_already_exists))]
     NurfileAlreadyExists { path: PathBuf },
 
@@ -38,7 +38,7 @@ pub enum Error {
         files: Vec<PathBuf>,
     },
 
-    #[error("Nur file {path:#?} has a syntax error")]
+    #[error("Nur file {path:?} has a syntax error")]
     #[diagnostic(code(nur::syntax_error))]
     NurfileSyntaxError {
         path: PathBuf,
@@ -46,7 +46,7 @@ pub enum Error {
         inner: miette::Report,
     },
 
-    #[error("Nur file {path:#?} has a task cycle: {cycle}")]
+    #[error("Nur file {path:?} has a task cycle: {cycle}")]
     #[diagnostic(code(nur::task_cycle))]
     TaskCycle { path: PathBuf, cycle: Cycle },
 

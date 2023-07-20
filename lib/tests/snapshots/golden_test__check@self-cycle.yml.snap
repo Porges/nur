@@ -4,5 +4,5 @@ expression: golden
 input_file: lib/tests/test_inputs/self-cycle.yml
 ---
 error: |2
-    × Nur file "/workspaces/nur/lib/tests/test_inputs/self-cycle.yml" has a task cycle: default → default
+    × Nur file "self-cycle.yml" has a task cycle: default → default
 

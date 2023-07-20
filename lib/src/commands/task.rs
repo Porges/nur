@@ -51,7 +51,11 @@ impl crate::commands::Command for Task {
                 .collect();
 
             let cycle = crate::Cycle { path: task_names };
-            return Err(crate::Error::TaskCycle { path, cycle }).into_diagnostic();
+            return Err(crate::Error::TaskCycle {
+                path: path.file_name().unwrap().into(),
+                cycle,
+            })
+            .into_diagnostic();
         }
 
         let execution_order = get_execution_order(graph, &self.task_names);
