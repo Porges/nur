@@ -28,7 +28,7 @@ fn check() -> Result<()> {
         .into_diagnostic()?;
 
     // normalize paths to avoid spurious changes
-    insta::with_settings!({filters => vec![("[^\"]+\\.yml", "[…].yml")]}, {
+    insta::with_settings!({filters => vec![("[^\"\\[]+\\.yml", "[…].yml")]}, {
         insta::glob!("test_inputs/*.yml", |path| {
             let mut output_buf = Vec::new();
             let mut error_buf = Vec::new();

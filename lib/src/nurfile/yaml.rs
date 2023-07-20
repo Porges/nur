@@ -229,7 +229,7 @@ pub fn parse(path: &Path, input: &str) -> miette::Result<crate::nurfile::NurFile
 // Takes a serde_yaml::Error and presents it as a miette::Diagnostic
 struct WrapErr {
     e: serde_yaml::Error,
-    source_code: String,
+    source_code: miette::NamedSource,
 }
 
 impl std::fmt::Display for WrapErr {
@@ -295,7 +295,7 @@ fn translate_error(path: &Path, e: serde_yaml::Error, input: &str) -> miette::Re
         path: path.to_owned(),
         inner: WrapErr {
             e,
-            source_code: input.to_string(),
+            source_code: miette::NamedSource::new(path.to_string_lossy(), input.to_string()),
         }
         .into(),
     }
