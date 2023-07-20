@@ -2,7 +2,6 @@
 
 set -eux
 
-rustup default stable
 rustup component add llvm-tools-preview clippy rustfmt
 rustup target add x86_64-unknown-linux-musl
 
