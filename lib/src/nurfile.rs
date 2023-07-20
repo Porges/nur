@@ -59,17 +59,13 @@ impl Default for OutputStyle {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum PrefixStyle {
     NoPrefix,
     Always,
-    Aligned,
-}
 
-impl Default for PrefixStyle {
-    fn default() -> Self {
-        PrefixStyle::Aligned
-    }
+    #[default]
+    Aligned,
 }
 
 #[derive(Debug)]

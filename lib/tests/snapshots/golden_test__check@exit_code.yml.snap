@@ -1,4 +1,10 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/exit_code.yml
+---
 stdout: |
   default╭╴ Started task ‘default’
          │ignored result!
          ╰╴ Task ‘default’ completed
+

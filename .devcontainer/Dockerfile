@@ -6,5 +6,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     jq
 
 USER vscode
-RUN rustup target add x86_64-unknown-linux-musl && rustup default stable
-RUN cargo install cargo-edit cargo-deny cargo-workspaces git-cliff
+
+COPY install.sh .
+RUN ./install.sh
+
+USER root
+RUN rm install.sh

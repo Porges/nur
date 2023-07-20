@@ -3,7 +3,7 @@ pub mod nurfile;
 pub mod output;
 pub mod version;
 
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf};
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -46,9 +46,9 @@ pub enum Error {
         inner: miette::Report,
     },
 
-    #[error("Nur file {path:#?} has a task cycle involving task ‘{task_name}’")]
+    #[error("Nur file {path:#?} has a task cycle: {cycle}")]
     #[diagnostic(code(nur::task_cycle))]
-    TaskCycle { path: PathBuf, task_name: String },
+    TaskCycle { path: PathBuf, cycle: Cycle },
 
     #[error("Unknown task ‘{task_name}’")]
     #[diagnostic(
@@ -63,6 +63,21 @@ pub enum Error {
         task_name: String,
         task_error: TaskError,
     },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Cycle {
+    path: Vec<String>,
+}
+
+impl Display for Cycle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for item in &self.path {
+            write!(f, "{} → ", item)?;
+        }
+
+        write!(f, "{}", self.path[0])
+    }
 }
 
 type Result<T> = miette::Result<T>;

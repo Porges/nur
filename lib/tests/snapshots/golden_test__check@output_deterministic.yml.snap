@@ -1,3 +1,8 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/output_deterministic.yml
+---
 stdout: |2
        t5╭╴ Started task ‘t5’
          ╰╴ Task ‘t5’ completed
@@ -11,3 +16,4 @@ stdout: |2
          ╰╴ Task ‘t1’ completed
   default╭╴ Started task ‘default’
          ╰╴ Task ‘default’ completed
+

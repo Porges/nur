@@ -1,3 +1,8 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/env.yml
+---
 stdout: |2
      inner╭╴ Started task ‘inner’
           │inner
@@ -10,3 +15,4 @@ stdout: |2
           ╰╴ Task ‘override’ completed
    default╭╴ Started task ‘default’
           ╰╴ Task ‘default’ completed
+

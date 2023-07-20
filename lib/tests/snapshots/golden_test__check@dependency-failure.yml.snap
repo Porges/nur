@@ -1,3 +1,8 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/dependency-failure.yml
+---
 stdout: |2
         c╭╴ Started task ‘c’
          ╰╴ Task ‘c’ failed: external command failed (exit status: 100) when executing: `exit 100`
@@ -8,3 +13,4 @@ error: |
   nur::task_failed
 
     × Task ‘0’ failed: external command failed (exit status: 100) when executing: `exit 100`
+

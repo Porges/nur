@@ -1,4 +1,10 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/hello_world.yml
+---
 stdout: |
   default╭╴ Started task ‘default’
          │Hello, world!
          ╰╴ Task ‘default’ completed
+

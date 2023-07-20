@@ -1,3 +1,8 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/dependencies.yml
+---
 stdout: |2
     hello╭╴ Started task ‘hello’
          │hello!
@@ -7,3 +12,4 @@ stdout: |2
          ╰╴ Task ‘world’ completed
   default╭╴ Started task ‘default’
          ╰╴ Task ‘default’ completed
+

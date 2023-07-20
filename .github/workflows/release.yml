@@ -7,43 +7,26 @@ on:
     branches: [main]
 
 env:
-    CARGO_TERM_COLOR: always
+  CI: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - name: Install specific Rust version
+        uses: dtolnay/rust-toolchain@master
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          default: true
-          toolchain: stable
+          toolchain: "1.71"
           target: x86_64-unknown-linux-musl
-          # components: rustfmt, clippy
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --locked --target x86_64-unknown-linux-musl
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --locked --target x86_64-unknown-linux-musl
-
+          default: true
+          components: clippy, rustfmt, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo llvm-cov nextest --all-targets --locked --workspace --lcov
+      - run: cargo build --release --locked
       - uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-
       - uses: actions/upload-artifact@v3
         with:
           name: nur

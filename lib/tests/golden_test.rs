@@ -1,17 +1,14 @@
-use std::{
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
-use goldenfile::Mint;
 use miette::{IntoDiagnostic, Result};
 use tokio::io::AsyncWrite;
 
 use nur_lib::{commands::Command, nurfile::OutputOptions};
 
-#[tokio::test]
-async fn run_golden_tests() -> Result<()> {
+#[test]
+fn check() -> Result<()> {
+    // https://www.youtube.com/watch?v=jTqwe57ObFo
+
     // override default hook,  since we need the output
     // to be consistent regardless of where it is running
     miette::set_hook(Box::new(|_diag| {
@@ -25,42 +22,30 @@ async fn run_golden_tests() -> Result<()> {
         )
     }))?;
 
-    let parent_dir: PathBuf = "tests/goldenfiles".into();
-    let mut mint = Mint::new(&parent_dir);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .into_diagnostic()?;
 
-    let yaml_extension: std::ffi::OsString = "yml".into();
-    for entry in fs::read_dir(&parent_dir).into_diagnostic()? {
-        let entry = entry.into_diagnostic()?;
-        let path = entry.path();
-        if path.extension() != Some(&yaml_extension) {
-            continue;
-        }
-
+    insta::glob!("test_inputs/*.yml", |path| {
         let mut output_buf = Vec::new();
         let mut error_buf = Vec::new();
 
-        let result = run_config(&parent_dir, &path, &mut output_buf, &mut error_buf).await;
-
-        let golden_path = {
-            // https://www.youtube.com/watch?v=jTqwe57ObFo
-            let mut name = PathBuf::from(entry.file_name());
-            name.set_extension("txt");
-            name
-        };
-
-        let golden = mint.new_goldenfile(&golden_path).into_diagnostic()?;
-        write_outputs(golden, &output_buf, &error_buf, result)?;
-    }
+        let result = rt.block_on(run_config(path, &mut output_buf, &mut error_buf));
+        let golden = prep_output(&output_buf, &error_buf, result);
+        insta::assert_snapshot!(golden);
+    });
 
     Ok(())
 }
 
 fn run_config<'a>(
-    parent_dir: &Path,
     nurfile_path: &Path,
     stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
     stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
 ) -> impl std::future::Future<Output = miette::Result<()>> + 'a {
+    let parent_dir = nurfile_path.parent().unwrap();
+
     let ctx = nur_lib::commands::Context {
         cwd: parent_dir.to_owned(),
         stdout,
@@ -85,28 +70,19 @@ fn run_config<'a>(
     async move { task_command.run(ctx).await }
 }
 
-fn write_outputs(
-    mut golden: std::fs::File,
-    stdout: &[u8],
-    stderr: &[u8],
-    result: Result<()>,
-) -> Result<()> {
+fn prep_output(stdout: &[u8], stderr: &[u8], result: Result<()>) -> String {
     let error = match result {
         Err(e) => Some(format!("{:?}", e)),
         Ok(()) => None,
     };
 
-    let output = &Golden {
+    let result = Golden {
         stdout: from_str(stdout),
         stderr: from_str(stderr),
         error,
     };
 
-    serde_yaml::to_writer(&golden, output).into_diagnostic()?;
-
-    golden.flush().into_diagnostic()?;
-
-    Ok(())
+    serde_yaml::to_string(&result).unwrap()
 }
 
 fn from_str(x: &[u8]) -> Option<String> {

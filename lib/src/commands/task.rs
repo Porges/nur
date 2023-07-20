@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use command_group::{tokio::AsyncCommandGroup, UnixChildExt};
 use futures::{future::Shared, FutureExt};
 use miette::IntoDiagnostic;
-use petgraph::algo;
 use petgraph::graphmap::DiGraphMap;
+use rustworkx_core::connectivity::find_cycle;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     sync::{mpsc, oneshot},
@@ -42,10 +42,17 @@ impl crate::commands::Command for Task {
         };
 
         // validate no cycles in graph
-        algo::toposort(&graph, None).map_err(|cyc| crate::Error::TaskCycle {
-            path,
-            task_name: cyc.node_id().to_owned(),
-        })?;
+        let initial_task = config.tasks.keys().next().map(|s| s.as_str());
+        let cycle = find_cycle(&graph, initial_task);
+        if !cycle.is_empty() {
+            let task_names = cycle
+                .into_iter()
+                .map(|(from, _to)| from.to_string())
+                .collect();
+
+            let cycle = crate::Cycle { path: task_names };
+            return Err(crate::Error::TaskCycle { path, cycle }).into_diagnostic();
+        }
 
         let execution_order = get_execution_order(graph, &self.task_names);
 

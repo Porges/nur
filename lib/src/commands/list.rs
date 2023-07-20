@@ -1,5 +1,7 @@
 use miette::IntoDiagnostic;
-use nu_table::StyledString;
+use nu_ansi_term::Style;
+use nu_table::{NuTable, TableConfig, TableTheme, TextStyle};
+use tabled::grid::records::vec_records::CellInfo;
 use terminal_size::{terminal_size, Height, Width};
 use tokio::io::AsyncWriteExt;
 
@@ -12,33 +14,31 @@ impl crate::commands::Command for List {
     async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         let (_, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
 
-        let text_style = Default::default();
-        let taskdata: Vec<Vec<StyledString>> = config
+        let mut taskdata: Vec<Vec<CellInfo<String>>> = config
             .tasks // already sorted by virtue of being in a BTreeMap
             .into_iter()
-            .map(|(name, task)| {
-                vec![
-                    StyledString::new(name, text_style),
-                    StyledString::new(task.description, text_style),
-                ]
-            })
+            .map(|(name, task)| vec![CellInfo::new(name), CellInfo::new(task.description)])
             .collect();
 
-        let table = nu_table::Table::new(
+        taskdata.insert(
+            0,
             vec![
-                StyledString::new("Name".to_string(), text_style),
-                StyledString::new("Description".to_string(), text_style),
+                CellInfo::new("Name".to_string()),
+                CellInfo::new("Description".to_string()),
             ],
-            taskdata,
-            nu_table::TableTheme::rounded(),
         );
+
+        let mut table = NuTable::from(taskdata);
+        table.set_data_style(TextStyle::basic_left());
+        table.set_header_style(TextStyle::basic_left().style(Style::new().bold()));
+
+        let config = TableConfig::new()
+            .theme(TableTheme::rounded())
+            .with_header(true);
 
         let (Width(term_width), _) = terminal_size().unwrap_or((Width(80), Height(24)));
 
-        let config = Default::default();
-        let color_hm = Default::default();
-        let alignments = Default::default();
-        if let Some(mut table) = table.draw_table(&config, &color_hm, alignments, term_width as usize) {
+        if let Some(mut table) = table.draw(config, term_width as usize) {
             table.push('\n');
 
             ctx.stdout

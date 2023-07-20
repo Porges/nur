@@ -1,3 +1,8 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/variations.yml
+---
 stdout: |2
       runSh╭╴ Started task ‘runSh’
            │run sh
@@ -9,3 +14,4 @@ stdout: |2
            │plain cmd
            │alternate cmd
            ╰╴ Task ‘default’ completed
+

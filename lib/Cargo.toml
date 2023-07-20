@@ -18,15 +18,18 @@ command-group = { version= "2", features = ["with-tokio"] }
 futures = "0.3.24"
 knuffel = { version = "2.0.0", optional = true }
 miette = { version = "5.5", features = [] }
-nu-engine = { version = "0.68", optional = true } 
-nu-parser = { version = "0.68", optional = true }
-nu-protocol = "0.68"
-nu-table = "0.68"
+nu-ansi-term = "0.47"
+nu-engine = { version = "0.82", optional = true } 
+nu-parser = { version = "0.82", optional = true }
+nu-protocol = "0.82"
+nu-table = "0.82"
 petgraph = { version = "0.6.2", features = ["graphmap"] }
 question = "0.2.2"
+rustworkx-core = "0.13.0"
 serde = { version = "1.0.144", optional = true }
-serde_with = "2.1"
+serde_with = "3.1"
 serde_yaml = { version = "0.9", optional = true }
+tabled = "0.12.2"
 terminal_size = "0.2.1"
 thiserror = "1.0.35"
 tokio = { version = "1.23.1", features = ["process", "io-util", "io-std", "sync", "fs", "macros"] }
@@ -34,5 +37,5 @@ tokio-util = "0.7.4"
 void = "1.0.2"
 
 [dev-dependencies]
-goldenfile = "1.4.3"
-tokio = { version = "1.23.1", features = ["process", "io-util", "io-std", "rt", "macros", "fs"] }
+insta = { version = "1.31", features =["glob"] }
+tokio = { version = "1.23.1", features = ["rt"] }
