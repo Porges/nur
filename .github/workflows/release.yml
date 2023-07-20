@@ -19,9 +19,9 @@ jobs:
         with:
           toolchain: "1.71"
           target: x86_64-unknown-linux-musl
-          default: true
           components: clippy, rustfmt, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
+      - run: .devcontainer/install.sh
       - run: cargo llvm-cov nextest --all-targets --locked --workspace --lcov
       - run: cargo build --release --locked
       - uses: codecov/codecov-action@v2
