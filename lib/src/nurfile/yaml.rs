@@ -1,7 +1,8 @@
-use std::{collections::BTreeMap, error::Error, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 use miette::Diagnostic;
 use serde::Deserialize;
+use thiserror::Error;
 use void::Void;
 
 #[derive(Deserialize)]
@@ -226,78 +227,26 @@ pub fn parse(path: &Path, input: &str) -> miette::Result<crate::nurfile::NurFile
     Ok(nf.into())
 }
 
-// Takes a serde_yaml::Error and presents it as a miette::Diagnostic
-struct WrapErr {
-    e: serde_yaml::Error,
-    source_code: miette::NamedSource,
-}
+// Present a serde_yaml::Error as a miette::Diagnostic
+#[derive(Debug, Error, Diagnostic)]
+#[error("YAML error: {inner}")]
+struct YamlError {
+    inner: serde_yaml::Error,
 
-impl std::fmt::Display for WrapErr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.e.fmt(f)
-    }
-}
+    #[source_code]
+    src: miette::NamedSource,
 
-impl std::fmt::Debug for WrapErr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.e, f)
-    }
-}
-
-impl std::error::Error for WrapErr {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.e.source()
-    }
-}
-
-impl miette::Diagnostic for WrapErr {
-    fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        None
-    }
-
-    fn severity(&self) -> Option<miette::Severity> {
-        None
-    }
-
-    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        None
-    }
-
-    fn url<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        None
-    }
-
-    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        Some(&self.source_code)
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        match self.e.location() {
-            Some(loc) => {
-                let label = miette::LabeledSpan::new(Some("here".to_string()), loc.index(), 0);
-                Some(Box::new([label].into_iter()))
-            }
-            None => None,
-        }
-    }
-
-    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
-        None
-    }
-
-    fn diagnostic_source(&self) -> Option<&dyn Diagnostic> {
-        None
-    }
+    #[label("here")]
+    err_span: Option<miette::SourceSpan>,
 }
 
 fn translate_error(path: &Path, e: serde_yaml::Error, input: &str) -> miette::Report {
-    crate::Error::NurfileSyntaxError {
-        path: path.to_owned(),
-        inner: WrapErr {
-            e,
-            source_code: miette::NamedSource::new(path.to_string_lossy(), input.to_string()),
-        }
-        .into(),
+    YamlError {
+        src: miette::NamedSource::new(path.to_string_lossy(), input.to_string()),
+        err_span: e
+            .location()
+            .map(|loc| miette::SourceSpan::new(loc.index().into(), 0.into())),
+        inner: e,
     }
     .into()
 }

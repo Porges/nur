@@ -152,14 +152,11 @@ pub fn read_nurfile(
     };
 
     let contents = std::fs::read_to_string(&file.0).into_diagnostic()?;
-    let parsed = (file.1)(&file.0, &contents)?;
-    /* TODO: this hides the inner diagnostics
-        see: https://github.com/zkat/miette/issues/172
-        .map_err(|inner| Error::NurfileSyntaxError {
+    let parsed =
+        (file.1)(&file.0, &contents).map_err(|inner| crate::Error::NurfileSyntaxError {
             path: file.0.clone(),
             inner,
         })?;
-    */
 
     Ok((file.0, parsed))
 }
