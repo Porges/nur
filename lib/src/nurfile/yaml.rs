@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, error::Error};
+use std::{collections::BTreeMap, error::Error, path::Path};
 
 use miette::Diagnostic;
 use serde::Deserialize;
@@ -221,11 +221,12 @@ impl From<Command> for crate::nurfile::NurCommand {
     }
 }
 
-pub fn parse(_: &std::path::Path, input: &str) -> miette::Result<crate::nurfile::NurFile> {
-    let nf: NurYaml = serde_yaml::from_str(input).map_err(|e| translate_error(e, input))?;
+pub fn parse(path: &Path, input: &str) -> miette::Result<crate::nurfile::NurFile> {
+    let nf: NurYaml = serde_yaml::from_str(input).map_err(|e| translate_error(path, e, input))?;
     Ok(nf.into())
 }
 
+// Takes a serde_yaml::Error and presents it as a miette::Diagnostic
 struct WrapErr {
     e: serde_yaml::Error,
     source_code: String,
@@ -271,10 +272,13 @@ impl miette::Diagnostic for WrapErr {
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        self.e.location().map(|loc| {
-            let label = miette::LabeledSpan::new(Some("here".to_string()), loc.index(), 0);
-            Box::new([label].into_iter()) as Box<dyn Iterator<Item = _>>
-        })
+        match self.e.location() {
+            Some(loc) => {
+                let label = miette::LabeledSpan::new(Some("here".to_string()), loc.index(), 0);
+                Some(Box::new([label].into_iter()))
+            }
+            None => None,
+        }
     }
 
     fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
@@ -286,9 +290,14 @@ impl miette::Diagnostic for WrapErr {
     }
 }
 
-fn translate_error(e: serde_yaml::Error, input: &str) -> miette::Report {
-    miette::Report::new(WrapErr {
-        e,
-        source_code: input.to_string(),
-    })
+fn translate_error(path: &Path, e: serde_yaml::Error, input: &str) -> miette::Report {
+    crate::Error::NurfileSyntaxError {
+        path: path.to_owned(),
+        inner: WrapErr {
+            e,
+            source_code: input.to_string(),
+        }
+        .into(),
+    }
+    .into()
 }

@@ -4,5 +4,5 @@ expression: golden
 input_file: lib/tests/test_inputs/extended-cycle.yml
 ---
 error: |2
-    × Nur file "extended-cycle.yml" has a task cycle: a → b → c → default → a
+    × Nur file "[…].yml" has a task cycle: a → b → c → default → a
 

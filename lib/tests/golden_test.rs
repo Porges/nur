@@ -27,13 +27,16 @@ fn check() -> Result<()> {
         .build()
         .into_diagnostic()?;
 
-    insta::glob!("test_inputs/*.yml", |path| {
-        let mut output_buf = Vec::new();
-        let mut error_buf = Vec::new();
+    // normalize paths to avoid spurious changes
+    insta::with_settings!({filters => vec![("[^\"]+\\.yml", "[…].yml")]}, {
+        insta::glob!("test_inputs/*.yml", |path| {
+            let mut output_buf = Vec::new();
+            let mut error_buf = Vec::new();
 
-        let result = rt.block_on(run_config(path, &mut output_buf, &mut error_buf));
-        let golden = prep_output(&output_buf, &error_buf, result);
-        insta::assert_snapshot!(golden);
+            let result = rt.block_on(run_config(path, &mut output_buf, &mut error_buf));
+            let golden = prep_output(&output_buf, &error_buf, result);
+            insta::assert_snapshot!(golden);
+        });
     });
 
     Ok(())
