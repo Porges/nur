@@ -1,6 +1,6 @@
 use miette::IntoDiagnostic;
 use nu_ansi_term::Style;
-use nu_table::{NuTable, TableConfig, TableTheme, TextStyle};
+use nu_table::{NuTable, NuTableConfig, TableTheme, TextStyle};
 use tabled::grid::records::vec_records::CellInfo;
 use terminal_size::{terminal_size, Height, Width};
 use tokio::io::AsyncWriteExt;
@@ -32,9 +32,11 @@ impl crate::commands::Command for List {
         table.set_data_style(TextStyle::basic_left());
         table.set_header_style(TextStyle::basic_left().style(Style::new().bold()));
 
-        let config = TableConfig::new()
-            .theme(TableTheme::rounded())
-            .with_header(true);
+        let config = NuTableConfig {
+            theme: TableTheme::rounded(),
+            with_header: true,
+            ..Default::default()
+        };
 
         let (Width(term_width), _) = terminal_size().unwrap_or((Width(80), Height(24)));
 
