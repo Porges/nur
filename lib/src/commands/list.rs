@@ -12,7 +12,7 @@ pub struct List {
 #[async_trait::async_trait]
 impl crate::commands::Command for List {
     async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
-        let (_, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
+        let (_, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
         let mut taskdata: Vec<Vec<CellInfo<String>>> = config
             .tasks // already sorted by virtue of being in a BTreeMap

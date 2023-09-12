@@ -86,10 +86,7 @@ pub struct NurCommand {
     pub ignore_result: bool,
 }
 
-pub fn load_config(
-    initial_dir: &Path,
-    file: &Option<impl AsRef<Path>>,
-) -> crate::Result<(PathBuf, NurFile)> {
+pub fn load_config(initial_dir: &Path, file: Option<&Path>) -> crate::Result<(PathBuf, NurFile)> {
     let (path, nurconfig) = read_nurfile(initial_dir, file)?;
     Ok((path, nurconfig))
 }
@@ -142,21 +139,15 @@ pub fn find_nurfile(
     .into())
 }
 
-pub fn read_nurfile(
-    initial_dir: &Path,
-    file: &Option<impl AsRef<Path>>,
-) -> crate::Result<(PathBuf, NurFile)> {
-    let file = match file {
-        Some(x) => (x.as_ref().to_owned(), &yaml::parse as &NurfileParser),
+pub fn read_nurfile(initial_dir: &Path, file: Option<&Path>) -> crate::Result<(PathBuf, NurFile)> {
+    let (path, parser) = match file {
+        Some(x) => (x.to_owned(), &yaml::parse as &NurfileParser),
         None => find_nurfile(initial_dir, true)?,
     };
 
-    let contents = std::fs::read_to_string(&file.0).into_diagnostic()?;
-    let parsed =
-        (file.1)(&file.0, &contents).map_err(|inner| crate::Error::NurfileSyntaxError {
-            path: file.0.clone(),
-            inner,
-        })?;
-
-    Ok((file.0, parsed))
+    let contents = std::fs::read_to_string(&path).into_diagnostic()?;
+    match (parser)(&path, &contents) {
+        Ok(parsed) => Ok((path, parsed)),
+        Err(inner) => Err(crate::Error::NurfileSyntaxError { path, inner }.into()),
+    }
 }

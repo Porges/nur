@@ -8,7 +8,7 @@ pub struct Check {
 #[async_trait::async_trait]
 impl crate::commands::Command for Check {
     async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
-        let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
+        let (path, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
         let mut err_count = 0;
         for (task_name, task) in config.tasks {
@@ -71,10 +71,12 @@ async fn validate_cmd(cwd: &std::path::Path, cmd: &str) -> miette::Result<Vec<St
 
     let mut output = Vec::new();
 
-    let stderr = proc.stderr.expect("stderr handle");
-    let mut reader = BufReader::new(stderr).lines();
-    while let Some(line) = reader.next_line().await.into_diagnostic()? {
-        output.push(line);
+    {
+        let stderr = proc.stderr.expect("stderr handle");
+        let mut reader = BufReader::new(stderr).lines();
+        while let Some(line) = reader.next_line().await.into_diagnostic()? {
+            output.push(line);
+        }
     }
 
     Ok(output)

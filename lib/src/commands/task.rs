@@ -28,7 +28,7 @@ const DEFAULT_TASK_NAME: &str = "default";
 #[async_trait::async_trait]
 impl crate::commands::Command for Task {
     async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
-        let (path, config) = crate::nurfile::load_config(&ctx.cwd, &self.nur_file)?;
+        let (path, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
         let graph = {
             let mut graph: DiGraphMap<&str, ()> = DiGraphMap::new();
