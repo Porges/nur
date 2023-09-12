@@ -62,11 +62,9 @@ impl crate::commands::Command for Init {
             if path.exists() {
                 return Err(crate::Error::NurfileAlreadyExists { path }.into());
             } else {
+                let msg = format!("[dryrun] Would create file {path:#?} with sample content.\n");
                 ctx.stdout
-                    .write_all(
-                        format!("[dryrun] Would create file {path:#?} with sample content.")
-                            .as_bytes(),
-                    )
+                    .write_all(msg.as_bytes())
                     .await
                     .into_diagnostic()?;
             }
@@ -90,8 +88,9 @@ impl crate::commands::Command for Init {
                     .into_diagnostic()?;
             }
 
+            let msg = format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.\n");
             ctx.stdout
-                .write_all(format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.").as_bytes())
+                .write_all(msg.as_bytes())
                 .await
                 .into_diagnostic()?;
         }

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::path::PathBuf;
 
 use command_group::{tokio::AsyncCommandGroup, UnixChildExt};
 use futures::{future::Shared, FutureExt};
@@ -6,11 +7,12 @@ use miette::IntoDiagnostic;
 use petgraph::graphmap::DiGraphMap;
 use rustworkx_core::connectivity::find_cycle;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     sync::{mpsc, oneshot},
 };
 use tokio_util::sync::CancellationToken;
 
+use crate::nurfile::NurFile;
 use crate::{
     nurfile::{NurTask, OutputOptions},
     StatusMessage, TaskError, TaskResult, TaskStatus,
@@ -30,6 +32,70 @@ impl crate::commands::Command for Task {
     async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
+        let execution_order = self.tasks_from_config(path, &config)?;
+
+        if self.dry_run {
+            ctx.stdout
+                .write_all("Would run tasks in the following order:\n".as_bytes())
+                .await
+                .into_diagnostic()?;
+
+            for task_name in execution_order {
+                // TODO: write_all_vectored
+                let msg = format!("- {task_name}\n");
+                ctx.stdout
+                    .write_all(msg.as_bytes())
+                    .await
+                    .into_diagnostic()?;
+            }
+
+            ctx.stdout.flush().await.into_diagnostic()?;
+
+            Ok(())
+        } else {
+            let mut output = crate::output::create(
+                ctx.stdout,
+                ctx.stderr,
+                self.output_override
+                    .as_ref()
+                    .unwrap_or(&config.options.output),
+                &execution_order,
+            );
+
+            let (tx, mut rx) = mpsc::channel::<crate::StatusMessage>(100);
+            let local_ctx = LocalContext {
+                cwd: ctx.cwd.clone(),
+                tx,
+            };
+
+            let (task_results, ()) = tokio::join!(
+                run_tasks(local_ctx, execution_order, &config.tasks),
+                async move {
+                    while let Some(msg) = rx.recv().await {
+                        output.handle(msg).await;
+                    }
+                }
+            );
+
+            // TODO: report all errors?
+            for result in task_results? {
+                match result {
+                    Ok(_) => {}
+                    Err(e) => return Err(e),
+                }
+            }
+
+            Ok(())
+        }
+    }
+}
+
+impl Task {
+    fn tasks_from_config<'a>(
+        &'a self,
+        path: PathBuf,
+        config: &'a NurFile,
+    ) -> crate::Result<Vec<&'a str>> {
         let graph = {
             let mut graph: DiGraphMap<&str, ()> = DiGraphMap::new();
             for (name, data) in &config.tasks {
@@ -54,41 +120,7 @@ impl crate::commands::Command for Task {
             return Err(crate::Error::TaskCycle { path, cycle }).into_diagnostic();
         }
 
-        let execution_order = get_execution_order(graph, &self.task_names);
-
-        let mut output = crate::output::create(
-            ctx.stdout,
-            ctx.stderr,
-            self.output_override
-                .as_ref()
-                .unwrap_or(&config.options.output),
-            &execution_order,
-        );
-
-        let (tx, mut rx) = mpsc::channel::<crate::StatusMessage>(100);
-        let local_ctx = LocalContext {
-            cwd: ctx.cwd.clone(),
-            tx,
-        };
-
-        let (task_results, ()) = tokio::join!(
-            run_tasks(local_ctx, execution_order, &config.tasks),
-            async move {
-                while let Some(msg) = rx.recv().await {
-                    output.handle(msg).await;
-                }
-            }
-        );
-
-        // TODO: report all errors?
-        for result in task_results? {
-            match result {
-                Ok(_) => {}
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok(())
+        Ok(get_execution_order(graph, &self.task_names))
     }
 }
 

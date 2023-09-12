@@ -36,6 +36,12 @@ struct Cli {
     file: Option<PathBuf>,
 }
 
+// the 'subcommands' are:
+// * <none>: run the list of tasks
+// * --init: create a sample config file
+// * --list: list all tasks
+// * --check: syntax-check the config file
+
 fn build_command(cli: Cli) -> Box<dyn commands::Command> {
     if cli.init {
         return Box::new(commands::Init {
@@ -52,10 +58,7 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
         return Box::new(commands::List { nur_file: cli.file });
     }
 
-    if cli.dry_run {
-        todo!("dry-run not yet supported");
-    }
-
+    // if we are running in a Github action, automatically use a nice format
     let output_override = if std::env::var_os("GITHUB_ACTIONS") == Some("true".into()) {
         Some(OutputOptions {
             prefix: PrefixStyle::NoPrefix,
