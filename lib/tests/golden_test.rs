@@ -1,7 +1,6 @@
-use std::path::Path;
+use std::{io::Write, path::Path};
 
-use miette::{IntoDiagnostic, Result};
-use tokio::io::AsyncWrite;
+use miette::Result;
 
 use nur_lib::{commands::Command, nurfile::OutputOptions};
 
@@ -22,18 +21,13 @@ fn check() -> Result<()> {
         )
     }))?;
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .build()
-        .into_diagnostic()?;
-
     // normalize paths to avoid spurious changes
     insta::with_settings!({filters => vec![("[^\"\\[]+\\.yml", "[…].yml")]}, {
         insta::glob!("test_inputs/*.yml", |path| {
             let mut output_buf = Vec::new();
             let mut error_buf = Vec::new();
 
-            let result = rt.block_on(run_config(path, &mut output_buf, &mut error_buf));
+            let result = run_config(path, &mut output_buf, &mut error_buf);
             let golden = prep_output(&output_buf, &error_buf, result);
             insta::assert_snapshot!(golden);
         });
@@ -42,11 +36,11 @@ fn check() -> Result<()> {
     Ok(())
 }
 
-fn run_config<'a>(
+fn run_config(
     nurfile_path: &Path,
-    stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
-    stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
-) -> impl std::future::Future<Output = miette::Result<()>> + 'a {
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> miette::Result<()> {
     let parent_dir = nurfile_path.parent().unwrap();
 
     let ctx = nur_lib::commands::Context {
@@ -66,11 +60,12 @@ fn run_config<'a>(
                 separator_first: Some("╭".to_string()),
                 separator_last: Some("╰".to_string()),
                 deterministic: true,
+                only_on_failure: false,
             },
         }),
     };
 
-    async move { task_command.run(ctx).await }
+    task_command.run(ctx)
 }
 
 fn prep_output(stdout: &[u8], stderr: &[u8], result: Result<()>) -> String {

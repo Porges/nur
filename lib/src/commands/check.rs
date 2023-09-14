@@ -5,15 +5,19 @@ pub struct Check {
     pub nur_file: Option<std::path::PathBuf>,
 }
 
-#[async_trait::async_trait]
 impl crate::commands::Command for Check {
-    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
+    fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
+
+        let tokio_rt = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .into_diagnostic()?;
 
         let mut err_count = 0;
         for (task_name, task) in config.tasks {
             for (ix, cmd) in task.commands.iter().enumerate() {
-                let errors = validate_cmd(&ctx.cwd, &cmd.sh).await?;
+                let errors = tokio_rt.block_on(validate_cmd(&ctx.cwd, &cmd.sh))?;
                 if !errors.is_empty() {
                     err_count += 1;
                     let message = format!(
@@ -21,17 +25,11 @@ impl crate::commands::Command for Check {
                         cmd.sh
                     );
 
-                    ctx.stdout
-                        .write_all(message.as_bytes())
-                        .await
-                        .into_diagnostic()?;
+                    ctx.stdout.write_all(message.as_bytes()).into_diagnostic()?;
 
                     for line in errors {
                         let line = "\t".to_owned() + &line;
-                        ctx.stdout
-                            .write_all(line.as_bytes())
-                            .await
-                            .into_diagnostic()?
+                        ctx.stdout.write_all(line.as_bytes()).into_diagnostic()?
                     }
                 }
             }
@@ -40,12 +38,10 @@ impl crate::commands::Command for Check {
         if err_count == 0 {
             ctx.stdout
                 .write_all(format!("No syntax errors found in: {path:#?}\n").as_bytes())
-                .await
                 .into_diagnostic()?;
         } else {
             ctx.stdout
                 .write_all(format!("{err_count} syntax errors found in: {path:#?}\n").as_bytes())
-                .await
                 .into_diagnostic()?;
         }
 

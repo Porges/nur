@@ -67,6 +67,7 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
                 separator_first: Some("::group::".to_string()),
                 separator_last: Some("::endgroup::".to_string()),
                 deterministic: true,
+                only_on_failure: false,
             },
         })
     } else {
@@ -81,70 +82,16 @@ fn build_command(cli: Cli) -> Box<dyn commands::Command> {
     })
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> miette::Result<()> {
+fn main() -> miette::Result<()> {
     let cwd = std::env::current_dir().into_diagnostic()?;
     let cli = Cli::parse();
     let command = build_command(cli);
 
     let ctx = nur_lib::commands::Context {
         cwd,
-        stdout: &mut tokio::io::stdout(),
-        stderr: &mut tokio::io::stderr(),
+        stdout: &mut std::io::stdout().lock(),
+        stderr: &mut std::io::stderr().lock(),
     };
 
-    command.run(ctx).await
-}
-
-#[cfg(feature = "nu")]
-fn nu() {
-    {
-        let engine_state = nu_command::create_default_context(&cwd);
-        let stack = {
-            let mut it = nu_protocol::engine::Stack::new();
-            it.add_env_var(
-                "PWD".to_string(),
-                nu_protocol::Value::String {
-                    val: cwd.to_string_lossy().to_string(),
-                    span: nu_protocol::Span::test_data(),
-                },
-            );
-            it
-        };
-
-        for (_name, task) in &config.tasks {
-            let mut stack = stack.clone(); // share vars across commands in the same task
-            for cmd in &task.commands {
-                let (lexed, err) = nu_parser::lex(cmd.as_bytes(), 0, &[], &[], false);
-                if let Some(err) = err {
-                    return Err(err.into());
-                }
-
-                let (lite_block, err) = nu_parser::lite_parse(&lexed);
-                if let Some(err) = err {
-                    return Err(err.into());
-                }
-
-                let mut working_set = nu_protocol::engine::StateWorkingSet::new(&engine_state);
-                working_set.add_file("command".into(), cmd.as_bytes());
-                let (block, err) =
-                    nu_parser::parse_block(&mut working_set, &lite_block, true, &[], false);
-                if let Some(err) = err {
-                    return Err(err.into());
-                }
-
-                let input = nu_protocol::PipelineData::Value(
-                    nu_protocol::Value::Nothing {
-                        span: nu_protocol::Span::new(0, 0),
-                    },
-                    None,
-                );
-
-                let result =
-                    nu_engine::eval_block(&engine_state, &mut stack, &block, input, false, false)?;
-
-                result.print(&engine_state, &mut stack)?;
-            }
-        }
-    }
+    command.run(ctx)
 }

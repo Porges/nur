@@ -1,0 +1,14 @@
+version: 1.0
+
+default:
+  after: [a, b]
+
+a:
+  cancellable: false
+  run:
+  - 'exit 1'
+
+b:
+  cancellable: false
+  run:
+  - 'exit 2'

@@ -1,8 +1,7 @@
-use std::path::Path;
+use std::{io::Write, path::Path};
 
 use miette::IntoDiagnostic;
 use question::{Answer, Question};
-use tokio::io::AsyncWriteExt;
 
 pub struct Init {
     pub nur_file: Option<std::path::PathBuf>,
@@ -11,7 +10,7 @@ pub struct Init {
 
 const DEFAULT_NAME: &str = "nur.yml";
 
-const DEFAULT_CONTENT: &str = r#"version: 1.0
+const DEFAULT_CONTENT: &str = r"version: 1.0
 default:
     description: A welcoming message.
     run:
@@ -27,11 +26,10 @@ more:
     - echo
     - sleep 2
     - echo 'This concludes the “tutorial”. Enjoy!'
-"#;
+";
 
-#[async_trait::async_trait]
 impl crate::commands::Command for Init {
-    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
+    fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
         // ensure that we aren’t going to overwrite anything:
         if let Some(nur_file) = &self.nur_file {
             if nur_file.exists() {
@@ -43,12 +41,11 @@ impl crate::commands::Command for Init {
         } else {
             match crate::nurfile::find_nurfile(&ctx.cwd, false) {
                 Ok((path, _)) => return Err(crate::Error::NurfileAlreadyExists { path }.into()),
-                Err(e) => match e.downcast() {
-                    Ok(crate::Error::NurfileNotFound { .. }) => {
+                Err(e) => match e {
+                    crate::Error::NurfileNotFound { .. } => {
                         // note that this is the only success case
                     }
-                    Ok(e) => return Err(e.into()),
-                    Err(e) => return Err(e),
+                    e => return Err(e.into()),
                 },
             }
         }
@@ -63,18 +60,14 @@ impl crate::commands::Command for Init {
                 return Err(crate::Error::NurfileAlreadyExists { path }.into());
             } else {
                 let msg = format!("[dryrun] Would create file {path:#?} with sample content.\n");
-                ctx.stdout
-                    .write_all(msg.as_bytes())
-                    .await
-                    .into_diagnostic()?;
+                ctx.stdout.write_all(msg.as_bytes()).into_diagnostic()?;
             }
         } else {
             {
-                let mut file = tokio::fs::OpenOptions::new()
+                let mut file = std::fs::OpenOptions::new()
                     .write(true)
                     .create_new(true)
                     .open(&path)
-                    .await
                     .map_err(|e| {
                         if e.kind() == std::io::ErrorKind::AlreadyExists {
                             crate::Error::NurfileAlreadyExists { path: path.clone() }
@@ -84,15 +77,11 @@ impl crate::commands::Command for Init {
                     })?;
 
                 file.write_all(DEFAULT_CONTENT.as_bytes())
-                    .await
                     .into_diagnostic()?;
             }
 
             let msg = format!("Created new file {path:#?} with sample content.\n💡 Now try `nur` to run the ‘default’ task.\n");
-            ctx.stdout
-                .write_all(msg.as_bytes())
-                .await
-                .into_diagnostic()?;
+            ctx.stdout.write_all(msg.as_bytes()).into_diagnostic()?;
         }
 
         Ok(())

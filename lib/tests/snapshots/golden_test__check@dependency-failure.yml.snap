@@ -5,12 +5,9 @@ input_file: lib/tests/test_inputs/dependency-failure.yml
 ---
 stdout: |2
         c╭╴ Started task ‘c’
-         ╰╴ Task ‘c’ failed: external command failed (exit status: 100) when executing: `exit 100`
+         ╰╴ Task ‘c’ failed: shell command `exit 100` failed (exit status: 100)
         b╰╴ Task ‘b’ skipped
         a╰╴ Task ‘a’ skipped
   default╰╴ Task ‘default’ skipped
-error: |
-  nur::task_failed
-
-    × Task ‘0’ failed: external command failed (exit status: 100) when executing: `exit 100`
+error: "nur::task_failed\n\n  × Task ‘c’ failed\n  ╰─▶ nur::shell_command_failed\n      \n        × shell command `exit 100` failed (exit status: 100)\n      \n"
 

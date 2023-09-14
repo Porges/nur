@@ -33,6 +33,12 @@ test-failure:
 afterSlow:
     after: [slow]
 
+failure:
+    run:
+    - echo "hi!"
+    - echo "hi 2!"
+    - exit 1
+
 slow:
     run: sleep 20
 

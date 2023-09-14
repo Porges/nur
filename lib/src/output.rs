@@ -1,7 +1,5 @@
 use std::fmt::Write;
 
-use tokio::io::AsyncWrite;
-
 pub mod grouped;
 pub mod sink;
 pub mod streamed;
@@ -11,26 +9,26 @@ pub use streamed::Streamed;
 
 use crate::nurfile::*;
 
-#[async_trait::async_trait]
-pub trait Output<T>: Send + Sync {
-    async fn handle(&mut self, msg: T);
+pub trait Output<T> {
+    fn handle(&mut self, msg: T);
 }
 
 pub fn create<'a>(
-    stdout: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
-    stderr: &'a mut (dyn AsyncWrite + Send + Sync + Unpin),
+    stdout: &'a mut dyn std::io::Write,
+    stderr: &'a mut dyn std::io::Write,
     options: &OutputOptions,
     execution_order: &[&str],
 ) -> Box<dyn Output<crate::StatusMessage> + 'a> {
-    let task_name_length_hint = execution_order.iter().map(|x| x.len()).max();
+    let task_name_length_hint = execution_order
+        .iter()
+        .map(|x| x.len())
+        .max()
+        .unwrap_or_default();
 
-    let prefixer: Box<dyn Prefixer + Send + Sync> = match options.prefix {
+    let prefixer: Box<dyn Prefixer> = match options.prefix {
         PrefixStyle::NoPrefix => Box::new(NullPrefixer {}),
         PrefixStyle::Always => Box::new(AlwaysPrefixer {}),
-        PrefixStyle::Aligned => {
-            let max_len = task_name_length_hint.unwrap_or_default();
-            Box::new(AlignedPrefixer::new(max_len))
-        }
+        PrefixStyle::Aligned => Box::new(AlignedPrefixer::new(task_name_length_hint)),
     };
 
     let output = sink::Sink { stdout, stderr };
@@ -56,6 +54,7 @@ pub fn create<'a>(
             deterministic,
             separator_first,
             separator_last,
+            only_on_failure,
         } => Box::new(Grouped::new(
             streamed(
                 separator,
@@ -64,6 +63,7 @@ pub fn create<'a>(
                 separator_last.as_ref().unwrap_or(separator),
             ),
             execution_order.len(),
+            *only_on_failure,
             *deterministic,
         )),
         OutputStyle::Streamed {

@@ -11,13 +11,5 @@ categories = ["development-tools::build-utils"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 miette = { version = "5.10", features = ["fancy-no-backtrace"] }
-nu-command = { version = "0.84", optional = true }
-nu-engine = { version = "0.84", optional = true }
-nu-parser = { version = "0.84", optional = true }
 nur-lib = { path="../lib" }
 serde_yaml = "0.9"
-tokio = { version = "1.23.1", features = ["rt", "macros"] }
-
-[features]
-default = []
-nu = ["dep:nu-command","dep:nu-engine","dep:nu-parser"]

@@ -17,6 +17,10 @@ pub enum Error {
     #[diagnostic(code(nur::io_error))]
     IoError(#[from] std::io::Error),
 
+    #[error("Internal error")]
+    #[diagnostic(code(nur::internal_error))]
+    InternalError(#[from] Box<dyn std::error::Error + Sync + Send>),
+
     #[error("Nur file not found in ‘{directory}’, or any of its parent directories")]
     #[diagnostic(
         code(nur::no_nur_files),
@@ -57,12 +61,25 @@ pub enum Error {
     )]
     NoSuchTask { task_name: String },
 
-    #[error("Task ‘{task_name}’ failed: {task_error}")]
+    #[error("Task ‘{task_name}’ failed")]
     #[diagnostic(code(nur::task_failed))]
     TaskFailed {
         task_name: String,
+        #[source]
+        #[diagnostic_source]
         task_error: TaskError,
     },
+
+    #[error("Multiple failures")]
+    #[diagnostic(code(nur::multiple_failures))]
+    Multiple {
+        #[related]
+        failures: Vec<Error>,
+    },
+}
+
+pub(crate) fn internal_error(e: impl std::error::Error + Sync + Send + 'static) -> Error {
+    Error::InternalError(Box::new(e))
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -80,7 +97,7 @@ impl Display for Cycle {
     }
 }
 
-type Result<T> = miette::Result<T>;
+type Result<T> = miette::Result<T, Error>;
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum TaskResult {
@@ -89,25 +106,34 @@ pub enum TaskResult {
     RanToCompletion,
 }
 
-#[derive(thiserror::Error, Debug, Clone)]
+#[derive(Error, Debug, Diagnostic, Clone)]
 pub enum TaskError {
-    #[error("external command failed ({exit_status}) when executing: `{command}`")]
+    #[error("shell command `{command}` failed ({exit_status})")]
+    #[diagnostic(code(nur::shell_command_failed))]
     Failed {
         command: String,
         exit_status: std::process::ExitStatus,
     },
-    #[error("I/O error: {kind}")]
-    IoError { kind: std::io::ErrorKind },
+
+    #[error("error starting executable ‘{executable}’: {kind}")]
+    #[diagnostic(code(nur::executable_start_error))]
+    ExecutableError {
+        executable: String,
+        kind: std::io::ErrorKind,
+    },
+
+    #[error("error waiting for command to complete: {kind}")]
+    #[diagnostic(code(nur::executable_wait_error))]
+    ExecutableWaitFailure {
+        executable: String,
+        kind: std::io::ErrorKind,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum TaskStatus {
-    StdOut {
-        line: String,
-    },
-    StdErr {
-        line: String,
-    },
+    StdOut(String),
+    StdErr(String),
     Started {},
     Finished {
         result: std::result::Result<TaskResult, TaskError>,

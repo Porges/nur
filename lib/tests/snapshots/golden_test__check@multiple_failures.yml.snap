@@ -1,0 +1,12 @@
+---
+source: lib/tests/golden_test.rs
+expression: golden
+input_file: lib/tests/test_inputs/multiple_failures.yml
+---
+stdout: |2
+        b╭╴ Started task ‘b’
+         ╰╴ Task ‘b’ failed: shell command `exit 2` failed (exit status: 2)
+        a╭╴ Started task ‘a’
+         ╰╴ Task ‘a’ failed: shell command `exit 1` failed (exit status: 1)
+error: "nur::multiple_failures\n\n  × Multiple failures\n\nError: nur::task_failed\n\n  × Task ‘b’ failed\n  ╰─▶ nur::shell_command_failed\n      \n        × shell command `exit 2` failed (exit status: 2)\n      \nError: nur::task_failed\n\n  × Task ‘a’ failed\n  ╰─▶ nur::shell_command_failed\n      \n        × shell command `exit 1` failed (exit status: 1)\n      \n"
+

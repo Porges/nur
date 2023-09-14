@@ -8,7 +8,7 @@ pub struct Streamed<O> {
     separator_switch: String,
     separator_last: String,
     names: Vec<String>,
-    prefixer: Box<dyn crate::output::Prefixer + Send + Sync>,
+    prefixer: Box<dyn crate::output::Prefixer>,
 }
 
 impl<O> Streamed<O> {
@@ -19,7 +19,7 @@ impl<O> Streamed<O> {
         separator_switch: String,
         separator_last: String,
         names: Vec<String>,
-        prefixer: Box<dyn crate::output::Prefixer + Send + Sync>,
+        prefixer: Box<dyn crate::output::Prefixer>,
     ) -> Self {
         Streamed {
             last_id: usize::MAX,
@@ -34,9 +34,8 @@ impl<O> Streamed<O> {
     }
 }
 
-#[async_trait::async_trait]
 impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for Streamed<O> {
-    async fn handle(&mut self, msg: crate::StatusMessage) {
+    fn handle(&mut self, msg: crate::StatusMessage) {
         let (task_id, status) = msg;
 
         let name = &self.names[task_id];
@@ -48,11 +47,11 @@ impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for
         };
 
         let to_send = match status {
-            TaskStatus::StdOut { line } => {
+            TaskStatus::StdOut(line) => {
                 let line = format!("{prefix}{}{line}", sep);
                 Message::Out(line)
             }
-            TaskStatus::StdErr { line } => {
+            TaskStatus::StdErr(line) => {
                 let line = format!("{prefix}{}{line}", sep);
                 Message::Err(line)
             }
@@ -80,6 +79,6 @@ impl<O: crate::output::Output<Message>> crate::output::Output<StatusMessage> for
 
         self.last_id = task_id;
 
-        self.output.handle(to_send).await;
+        self.output.handle(to_send);
     }
 }

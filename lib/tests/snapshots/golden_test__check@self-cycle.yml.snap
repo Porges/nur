@@ -3,6 +3,8 @@ source: lib/tests/golden_test.rs
 expression: golden
 input_file: lib/tests/test_inputs/self-cycle.yml
 ---
-error: |2
+error: |
+  nur::task_cycle
+
     × Nur file "[…].yml" has a task cycle: default → default
 

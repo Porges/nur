@@ -3,15 +3,13 @@ use nu_ansi_term::Style;
 use nu_table::{NuTable, NuTableConfig, TableTheme, TextStyle};
 use tabled::grid::records::vec_records::CellInfo;
 use terminal_size::{terminal_size, Height, Width};
-use tokio::io::AsyncWriteExt;
 
 pub struct List {
     pub nur_file: Option<std::path::PathBuf>,
 }
 
-#[async_trait::async_trait]
 impl crate::commands::Command for List {
-    async fn run<'c>(&self, ctx: crate::commands::Context<'c>) -> miette::Result<()> {
+    fn run(&self, ctx: crate::commands::Context) -> miette::Result<()> {
         let (_, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
         let mut taskdata: Vec<Vec<CellInfo<String>>> = config
@@ -43,14 +41,10 @@ impl crate::commands::Command for List {
         if let Some(mut table) = table.draw(config, term_width as usize) {
             table.push('\n');
 
-            ctx.stdout
-                .write_all(table.as_bytes())
-                .await
-                .into_diagnostic()?;
+            ctx.stdout.write_all(table.as_bytes()).into_diagnostic()?;
         } else {
             ctx.stderr
                 .write_all(b"Unable to fit table to terminal width")
-                .await
                 .into_diagnostic()?;
         }
 

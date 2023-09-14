@@ -5,6 +5,10 @@ use serde::Deserialize;
 use thiserror::Error;
 use void::Void;
 
+fn true_bool() -> bool {
+    true
+}
+
 #[derive(Deserialize)]
 pub struct NurYaml {
     version: crate::version::Version,
@@ -42,6 +46,7 @@ pub struct OutputOptions {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum OutputStyle {
     Grouped {
         separator: Option<String>,
@@ -49,6 +54,8 @@ pub enum OutputStyle {
         separator_end: Option<String>,
         #[serde(default)]
         deterministic: bool,
+        #[serde(default)]
+        only_on_failure: bool,
     },
     Streamed {
         separator: Option<String>,
@@ -75,6 +82,7 @@ impl From<OutputStyleAliases> for OutputStyle {
                 separator_start: None,
                 separator_end: None,
                 deterministic: false,
+                only_on_failure: false,
             },
         }
     }
@@ -113,6 +121,9 @@ pub struct Task {
 
     #[serde(alias = "env", default)]
     environment: BTreeMap<String, String>,
+
+    #[serde(default = "true_bool")]
+    cancellable: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -153,6 +164,7 @@ impl From<NurYaml> for crate::nurfile::NurFile {
                         description: t.description,
                         commands: t.run.into_iter().map(|x| x.into()).collect(),
                         dependencies: t.dependencies,
+                        cancellable: t.cancellable,
                     },
                 )
             })),
@@ -184,11 +196,13 @@ impl From<OutputStyle> for crate::nurfile::OutputStyle {
                 separator,
                 separator_end,
                 separator_start,
+                only_on_failure,
                 deterministic,
             } => crate::nurfile::OutputStyle::Grouped {
                 separator: separator.unwrap_or_else(|| "│".to_string()),
                 separator_first: Some(separator_start.unwrap_or_else(|| "╭".to_string())),
                 separator_last: Some(separator_end.unwrap_or_else(|| "╰".to_string())),
+                only_on_failure,
                 deterministic,
             },
             OutputStyle::Streamed {

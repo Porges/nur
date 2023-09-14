@@ -9,8 +9,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use miette::IntoDiagnostic;
-
 #[derive(Debug)]
 pub struct NurFile {
     pub version: crate::version::Version,
@@ -42,6 +40,7 @@ pub enum OutputStyle {
         separator: String,
         separator_first: Option<String>,
         separator_last: Option<String>,
+        only_on_failure: bool,
         deterministic: bool,
     },
     Streamed {
@@ -77,6 +76,7 @@ pub struct NurTask {
     pub description: String,
     pub dependencies: Vec<String>,
     pub commands: Vec<NurCommand>,
+    pub cancellable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -119,8 +119,7 @@ pub fn find_nurfile(
             return Err(crate::Error::MultipleNurFilesFound {
                 directory: root.to_owned(),
                 files: files_to_check.into_iter().map(|(path, _)| path).collect(),
-            }
-            .into());
+            });
         }
 
         if let Some(file) = files_to_check.pop() {
@@ -135,8 +134,7 @@ pub fn find_nurfile(
     // hit top level without finding file:
     Err(crate::Error::NurfileNotFound {
         directory: initial_dir.to_owned(),
-    }
-    .into())
+    })
 }
 
 pub fn read_nurfile(initial_dir: &Path, file: Option<&Path>) -> crate::Result<(PathBuf, NurFile)> {
@@ -145,9 +143,9 @@ pub fn read_nurfile(initial_dir: &Path, file: Option<&Path>) -> crate::Result<(P
         None => find_nurfile(initial_dir, true)?,
     };
 
-    let contents = std::fs::read_to_string(&path).into_diagnostic()?;
+    let contents = std::fs::read_to_string(&path).map_err(crate::Error::IoError)?;
     match (parser)(&path, &contents) {
         Ok(parsed) => Ok((path, parsed)),
-        Err(inner) => Err(crate::Error::NurfileSyntaxError { path, inner }.into()),
+        Err(inner) => Err(crate::Error::NurfileSyntaxError { path, inner }),
     }
 }
