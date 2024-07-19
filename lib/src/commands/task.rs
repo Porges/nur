@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 
-use command_group::{tokio::AsyncCommandGroup, UnixChildExt};
 use futures::{future::Shared, FutureExt};
 use miette::IntoDiagnostic;
 use petgraph::graphmap::DiGraphMap;
+use process_wrap::tokio::TokioCommandWrap;
 use rustworkx_core::connectivity::find_cycle;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
@@ -288,22 +288,32 @@ async fn run_cmds(
         }
 
         let shell = "/bin/sh";
-        let mut child = tokio::process::Command::new(shell)
-            .args(["-c", &cmd.sh])
-            .current_dir(&ctx.cwd)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .envs(&task.env) // task environment is overridden by cmd
-            .envs(&cmd.env)
-            .group_spawn()
-            .map_err(|e| TaskError::ExecutableError {
-                executable: shell.to_string(),
-                kind: e.kind(),
-            })?;
 
-        let stdout = child.inner().stdout.take().expect("no stdout handle");
-        let stderr = child.inner().stderr.take().expect("no stderr handle");
+        let mut wrapper = TokioCommandWrap::with_new(shell, |c| {
+            c.args(["-c", &cmd.sh])
+                .current_dir(&ctx.cwd)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .envs(&task.env) // task environment is overridden by cmd
+                .envs(&cmd.env);
+        });
+
+        #[cfg(target_os = "windows")]
+        wrapper.wrap(process_wrap::tokio::JobObject::new());
+
+        // TODO: this still isn't going to compile yet
+
+        #[cfg(target_os = "linux")]
+        wrapper.wrap(process_wrap::tokio::ProcessGroup::leader());
+
+        let mut child = wrapper.spawn().map_err(|e| TaskError::ExecutableError {
+            executable: shell.to_string(),
+            kind: e.kind(),
+        })?;
+
+        let stdout = child.inner_mut().stdout.take().expect("no stdout handle");
+        let stderr = child.inner_mut().stderr.take().expect("no stderr handle");
 
         let ((), (), status) = tokio::join!(
             spawn_reader(stdout, ctx.tx.clone(), task_id, TaskStatus::StdOut),
@@ -311,16 +321,16 @@ async fn run_cmds(
             async move {
                 tokio::select! {
                     () = cancellation.cancelled(), if task.cancellable => {
-                        if let Err(e) = child.signal(command_group::Signal::SIGINT) {
+                        if let Err(e) = child.signal(2 /* SIGINT */) {
                             if e.kind() == std::io::ErrorKind::InvalidInput {
                                 // already exited
-                                return Some(child.wait().await);
+                                return Some(Box::into_pin(child.wait()).await);
                             }
                         }
-                        _ = child.wait().await;
+                        _ = Box::into_pin(child.wait()).await;
                         None
                     }
-                    result = child.wait() => {
+                    result = Box::into_pin(child.wait()) => {
                         Some(result)
                     }
                 }

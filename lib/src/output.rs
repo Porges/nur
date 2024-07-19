@@ -119,7 +119,7 @@ impl Prefixer for AlignedPrefixer {
                 self.prefix = " ".repeat(self.max_len);
             }
 
-            self.last = task_name.to_owned();
+            task_name.clone_into(&mut self.last);
 
             self.first_prefix.clear();
             write!(

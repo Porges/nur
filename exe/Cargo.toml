@@ -10,6 +10,6 @@ categories = ["development-tools::build-utils"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-miette = { version = "5.10", features = ["fancy-no-backtrace"] }
+miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nur-lib = { path="../lib" }
 serde_yaml = "0.9"

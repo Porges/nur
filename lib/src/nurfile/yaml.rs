@@ -1,9 +1,8 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, convert::Infallible, path::Path};
 
 use miette::Diagnostic;
 use serde::Deserialize;
 use thiserror::Error;
-use void::Void;
 
 fn true_bool() -> bool {
     true
@@ -140,7 +139,7 @@ pub struct Command {
 }
 
 impl std::str::FromStr for Command {
-    type Err = Void;
+    type Err = Infallible;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Command {
             sh: s.to_string(),
@@ -248,7 +247,7 @@ struct YamlError {
     inner: serde_yaml::Error,
 
     #[source_code]
-    src: miette::NamedSource,
+    src: miette::NamedSource<String>,
 
     #[label("here")]
     err_span: Option<miette::SourceSpan>,
@@ -259,7 +258,7 @@ fn translate_error(path: &Path, e: serde_yaml::Error, input: &str) -> miette::Re
         src: miette::NamedSource::new(path.to_string_lossy(), input.to_string()),
         err_span: e
             .location()
-            .map(|loc| miette::SourceSpan::new(loc.index().into(), 0.into())),
+            .map(|loc| miette::SourceSpan::new(loc.index().into(), 0usize)),
         inner: e,
     }
     .into()

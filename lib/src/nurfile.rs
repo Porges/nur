@@ -91,7 +91,7 @@ pub fn load_config(initial_dir: &Path, file: Option<&Path>) -> crate::Result<(Pa
     Ok((path, nurconfig))
 }
 
-type NurfileParser = dyn Fn(&std::path::Path, &str) -> miette::Result<NurFile>;
+type NurfileParser = dyn Fn(&Path, &str) -> miette::Result<NurFile>;
 
 const FORMATS: &[(&str, &NurfileParser)] = &[
     #[cfg(feature = "kdl")]

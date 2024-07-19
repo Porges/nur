@@ -1,4 +1,4 @@
-use std::num::ParseIntError;
+use std::{fmt::Display, num::ParseIntError};
 
 #[derive(PartialOrd, Ord, PartialEq, Eq, Debug)]
 pub struct Version {
@@ -13,6 +13,12 @@ impl serde::Serialize for Version {
     {
         let as_str = format!("{}.{}", self.major, self.minor);
         serializer.serialize_str(&as_str)
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.major, self.minor)
     }
 }
 

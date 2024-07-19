@@ -1,6 +1,6 @@
 use std::{io::Write, path::Path};
 
-use miette::Result;
+use miette::{MietteHandlerOpts, Result};
 
 use nur_lib::{commands::Command, nurfile::OutputOptions};
 
@@ -12,7 +12,7 @@ fn check() -> Result<()> {
     // to be consistent regardless of where it is running
     miette::set_hook(Box::new(|_diag| {
         Box::new(
-            miette::MietteHandlerOpts::new()
+            MietteHandlerOpts::new()
                 .terminal_links(false)
                 .unicode(true)
                 .color(false)

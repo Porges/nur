@@ -7,7 +7,7 @@ use std::{fmt::Display, path::PathBuf};
 
 use miette::Diagnostic;
 use thiserror::Error;
-use version::Version;
+use version::{ParseVersionError, Version};
 
 pub const CURRENT_FILE_VERSION: Version = Version { major: 0, minor: 1 };
 
@@ -16,6 +16,18 @@ pub enum Error {
     #[error(transparent)]
     #[diagnostic(code(nur::io_error))]
     IoError(#[from] std::io::Error),
+
+    #[error("Missing version in nurfile")]
+    #[diagnostic(code(nur::missing_version))]
+    MissingVersion,
+
+    #[error("Invalid version in nurfile")]
+    #[diagnostic(code(nur::invalid_version))]
+    InvalidVersion(ParseVersionError),
+
+    #[error("Unsupported version {version} in nurfile")]
+    #[diagnostic(code(nur::unsupported_version))]
+    UnsupportedVersion { version: Version },
 
     #[error("Internal error")]
     #[diagnostic(code(nur::internal_error))]

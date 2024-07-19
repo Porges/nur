@@ -3,5 +3,4 @@ source: lib/tests/golden_test.rs
 expression: golden
 input_file: lib/tests/test_inputs/no_version.yml
 ---
-error: "nur::syntax_error\n\n  × Nur file \"[…].yml\" has a syntax error\n  ╰─▶   × YAML error: missing field `version` at line 2 column 1\n         ╭─[[…].yml:1:1]\n       1 │ # shouldn't run due to no version\n       2 │ tasks:\n         · ▲\n         · ╰── here\n       3 │   default:\n         ╰────\n      \n"
-
+error: "nur::syntax_error\n\n  × Nur file \"[…].yml\" has a syntax error\n  ╰─▶   × YAML error: missing field `version` at line 2 column 1\n         ╭─[[…].yml:2:1]\n       1 │ # shouldn't run due to no version\n       2 │ tasks:\n         · ▲\n         · ╰── here\n       3 │   default:\n         ╰────\n      \n"

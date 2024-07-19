@@ -1,48 +1,37 @@
-#[derive(knuffel::Decode, Debug)]
-pub struct NurKdl {
-    pub version: String,
+use std::str::FromStr;
 
-    #[knuffel(children(name = "let"))]
-    pub lets: Vec<Let>,
+use kdl::KdlDocument;
+use miette::IntoDiagnostic;
 
-    #[knuffel(children(name = "task"))]
-    pub tasks: Vec<Task>,
-}
+use crate::{version::Version, Error};
 
-impl From<NurKdl> for crate::nurfile::NurFile {
-    fn from(_: NurKdl) -> Self {
-        todo!()
+impl TryFrom<KdlDocument> for crate::nurfile::NurFile {
+    type Error = Error;
+    fn try_from(value: KdlDocument) -> Result<Self, Error> {
+        let version_str =
+            || -> Option<&str> { value.get("version")?.entries().first()?.value().as_string() }()
+                .ok_or(Error::MissingVersion)?;
+
+        let _version = Version::from_str(version_str).map_err(Error::InvalidVersion)?;
+
+        todo!();
+        /*
+        Ok(crate::nurfile::NurFile {
+            version,
+            options: todo!(),
+            lets: todo!(),
+            tasks: todo!(),
+            env: todo!(),
+        })
+        */
     }
 }
 
-#[derive(knuffel::Decode, Debug)]
-pub struct Let {
-    #[knuffel(argument)]
-    pub name: String,
-    #[knuffel(argument)]
-    pub value: String,
+pub fn parse(_path: &std::path::Path, input: &str) -> miette::Result<crate::nurfile::NurFile> {
+    let doc: KdlDocument = input.parse().into_diagnostic()?; // TODO: remove into_diagnostic when on same miette version
 
-    #[knuffel(property)]
-    pub env: Option<String>,
-}
+    //let displayable_filename = path.display().to_string();
+    //let nf: NurKdl = kdl::parse(&displayable_filename, input)?;
 
-#[derive(knuffel::Decode, Debug)]
-pub struct Task {
-    #[knuffel(argument)]
-    pub name: String,
-
-    #[knuffel(children(name = "exec"))]
-    pub execs: Vec<Exec>,
-}
-
-#[derive(knuffel::Decode, Debug)]
-pub struct Exec {
-    #[knuffel(argument)]
-    pub input: String,
-}
-
-pub fn parse(path: &std::path::Path, input: &str) -> miette::Result<crate::nurfile::NurFile> {
-    let displayable_filename = path.display().to_string();
-    let nf: NurKdl = knuffel::parse(&displayable_filename, input)?;
-    Ok(nf.into())
+    Ok(doc.try_into()?)
 }
