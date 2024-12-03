@@ -65,7 +65,7 @@ impl crate::commands::Command for Task {
                 // one thread for all tasks to run on
                 let result = s.spawn(|| {
                     let tokio_rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_io()
+                        .enable_all()
                         .build()
                         .unwrap();
 
@@ -300,7 +300,7 @@ async fn run_cmds(
         });
 
         #[cfg(target_os = "windows")]
-        wrapper.wrap(process_wrap::tokio::JobObject::new());
+        wrapper.wrap(process_wrap::tokio::JobObject);
 
         // TODO: this still isn't going to compile yet
 
@@ -321,12 +321,22 @@ async fn run_cmds(
             async move {
                 tokio::select! {
                     () = cancellation.cancelled(), if task.cancellable => {
+                        #[cfg(target_os = "windows")]
+                        if let Err(e) = child.start_kill() {
+                            if e.kind() == std::io::ErrorKind::InvalidInput {
+                                // already exited
+                                return Some(Box::into_pin(child.wait()).await);
+                            }
+                        }
+
+                        #[cfg(target_os = "linux")]
                         if let Err(e) = child.signal(2 /* SIGINT */) {
                             if e.kind() == std::io::ErrorKind::InvalidInput {
                                 // already exited
                                 return Some(Box::into_pin(child.wait()).await);
                             }
                         }
+
                         _ = Box::into_pin(child.wait()).await;
                         None
                     }

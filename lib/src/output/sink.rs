@@ -7,7 +7,7 @@ pub struct Sink<'a> {
     pub stderr: &'a mut dyn Write,
 }
 
-impl<'a> crate::output::Output<Message> for Sink<'a> {
+impl crate::output::Output<Message> for Sink<'_> {
     fn handle(&mut self, msg: Message) {
         match msg {
             Message::Out(mut line) => {

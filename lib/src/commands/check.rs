@@ -10,7 +10,7 @@ impl crate::commands::Command for Check {
         let (path, config) = crate::nurfile::load_config(&ctx.cwd, self.nur_file.as_deref())?;
 
         let tokio_rt = tokio::runtime::Builder::new_current_thread()
-            .enable_io()
+            .enable_all()
             .build()
             .into_diagnostic()?;
 
@@ -28,7 +28,7 @@ impl crate::commands::Command for Check {
                     ctx.stdout.write_all(message.as_bytes()).into_diagnostic()?;
 
                     for line in errors {
-                        let line = "\t".to_owned() + &line;
+                        let line = "\t".to_owned() + line.as_str();
                         ctx.stdout.write_all(line.as_bytes()).into_diagnostic()?
                     }
                 }
